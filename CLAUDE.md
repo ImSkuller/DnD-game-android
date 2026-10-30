@@ -51,7 +51,7 @@ These rules are permanent. Read `docs/implementation_plan.md` before making arch
 - Index every column used in WHERE/JOIN/ORDER of hot queries.
 - Item art is procedural vector (no per-combination bitmaps); never duplicate images. Cache built paths.
 - Load large things lazily; keep animations on the compositor/draw phase (no recomposition per frame).
-- Do not claim a performance target is met unless it was measured (see `docs/performance.md`).
+- Do not claim a performance target is met unless it was measured (measurements live in `docs/implementation_plan.md` §16).
 
 ## Documentation rules
 - Keep `docs/implementation_plan.md` current (milestones, decisions, schemas, protocol, limitations, tech debt).
