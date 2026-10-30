@@ -264,7 +264,7 @@ fun RhTextField(
     singleLine: Boolean = true,
     minLines: Int = 1,
     keyboard: KeyboardType = KeyboardType.Text,
-    onDark: Boolean = true,
+    onDark: Boolean = LocalInk.current != Theme.ink,
 ) {
     val t = Theme
     val ink = LocalInk.current

@@ -36,4 +36,5 @@ tmp/
 .kotlin/
 /screenshots/
 
-# NOTE: CLAUDE.md and docs/ are intentionally tracked.
+CLAUDE.md
+docs/

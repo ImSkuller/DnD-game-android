@@ -508,7 +508,10 @@ class ActionEngine(
         }
 
         private suspend fun transferItem(a: Action.TransferItem) {
-            val i = ownedItem(a.itemId)
+            val stashItem = dao.item(a.itemId)?.takeIf { it.campaignId == cid && it.ownerId == null }
+            // players may take items from the shared party stash into their own pack
+            if (stashItem != null && !actor.isDm && a.toOwnerId != actor.characterId) reject("You can only take stash items for yourself")
+            val i = stashItem ?: ownedItem(a.itemId)
             if (i.equipped) reject("Unequip it first")
             val target = a.toOwnerId
             if (target != null) requireChar(target)
@@ -585,9 +588,8 @@ class ActionEngine(
             val prev = camp.rollChain.ifEmpty { AuditChain.genesis(cid, camp.seed) }
             val expr = a.spec.expression()
             val hash = AuditChain.next(prev, id, expr, out.dice)
-            val isPublic = if (actor.isDm) a.isPublic else a.isPublic
             dao.upsert(RollRecord(id, cid, idx, clock(), actor.tag, a.label.clip(60), expr, out.dice.joinToString(","), a.spec.modifier,
-                out.total, out.tier.name, out.crit.name, isPublic, hash))
+                out.total, out.tier.name, out.crit.name, a.isPublic, hash))
             mark(EntityType.ROLL, id)
             camp = camp.copy(rollChain = hash, rollIdx = idx)
             dao.oldRollIds(cid, 2000).forEach { dao.deleteRoll(it); mark(EntityType.ROLL, it) }
