@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.Runehearth" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/rh_window_bg</item>
+        <item name="android:statusBarColor">@color/rh_window_bg</item>
+        <item name="android:navigationBarColor">@color/rh_window_bg</item>
+    </style>
+</resources>

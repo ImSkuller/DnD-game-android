@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Runehearth emblem: gold ring, heater shield, hearth flame, sword and two torch-sconces -->
+    <path android:fillColor="#00000000" android:strokeColor="#FFD9A441" android:strokeWidth="2.2"
+        android:pathData="M27,54 a27,27 0 1,0 54,0 a27,27 0 1,0 -54,0" />
+    <path android:fillColor="#FF3A2214" android:strokeColor="#FFD9A441" android:strokeWidth="2"
+        android:pathData="M54,26 L76,34 L76,54 C76,68 66,77 54,82 C42,77 32,68 32,54 L32,34 Z" />
+    <path android:fillColor="#FFE8651C"
+        android:pathData="M54,36 C60,44 64,48 64,56 C64,63 59,68 54,68 C49,68 44,63 44,56 C44,52 47,49 49,46 C50,49 52,50 53,50 C52,45 52,40 54,36 Z" />
+    <path android:fillColor="#FFFFC247"
+        android:pathData="M54,48 C57,52 59,55 59,59 C59,63 56,65 54,65 C52,65 49,63 49,59 C49,56 51,55 52,53 C53,55 54,55 54,55 C53,52 53,50 54,48 Z" />
+    <path android:fillColor="#FFD9A441" android:pathData="M30,30 L36,24 L40,28 L34,34 Z" />
+    <path android:fillColor="#FFD9A441" android:pathData="M78,30 L72,24 L68,28 L74,34 Z" />
+    <path android:fillColor="#FFB8C4CC" android:pathData="M52,12 L56,12 L57,24 L54,27 L51,24 Z" />
+    <path android:fillColor="#FFD9A441" android:pathData="M48,24 L60,24 L60,27 L48,27 Z" />
+</vector>

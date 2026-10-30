@@ -1,0 +1,4 @@
+-keepattributes *Annotation*, InnerClasses
+-keep,includedescriptorclasses class com.runehearth.app.**$$serializer { *; }
+-keepclassmembers class com.runehearth.app.** { *** Companion; }
+-keepclasseswithmembers class com.runehearth.app.** { kotlinx.serialization.KSerializer serializer(...); }
