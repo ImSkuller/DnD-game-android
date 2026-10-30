@@ -33,12 +33,12 @@ object Aud {
 }
 
 /** How a [Change] must be applied for one particular player. */
-enum class Route { UPSERT, DELETE, NONE }
+enum class SyncRoute { UPSERT, DELETE, NONE }
 
-fun Change.routeFor(characterId: String): Route = when {
-    Aud.contains(audience, characterId) -> if (deleted) Route.DELETE else Route.UPSERT
-    goneFor == Aud.ALL || characterId in Aud.tokens(goneFor) -> Route.DELETE
-    else -> Route.NONE
+fun Change.routeFor(characterId: String): SyncRoute = when {
+    Aud.contains(audience, characterId) -> if (deleted) SyncRoute.DELETE else SyncRoute.UPSERT
+    goneFor == Aud.ALL || characterId in Aud.tokens(goneFor) -> SyncRoute.DELETE
+    else -> SyncRoute.NONE
 }
 
 /** Serialised view of one entity plus who may see it. `visible=false` means "hidden from players" (tombstone). */
