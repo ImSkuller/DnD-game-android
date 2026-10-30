@@ -1,7 +1,8 @@
 package com.runehearth.app.net
 
 import androidx.room.withTransaction
-import com.runehearth.app.RunehearthApp
+import com.runehearth.app.data.Backup
+import com.runehearth.app.data.GameDatabase
 import com.runehearth.app.engine.Action
 import com.runehearth.app.engine.ActionResult
 import com.runehearth.app.engine.EntityStore
@@ -37,7 +38,8 @@ private class Denial(message: String) : Exception(message)
  * reconnects with exponential back-off, re-sending unacknowledged actions (the host de-duplicates by action id).
  */
 class RemoteSession(
-    private val app: RunehearthApp,
+    private val db: GameDatabase,
+    private val backup: Backup,
     private val host: String,
     private val port: Int,
     private val code: String,
@@ -47,7 +49,7 @@ class RemoteSession(
     private val newName: String? = null,
 ) : GameSession {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val dao get() = app.db.dao()
+    private val dao get() = db.dao()
     private val rng = SecureRandom()
     private var job: Job? = null
     @Volatile private var conn: Conn? = null
@@ -164,8 +166,8 @@ class RemoteSession(
     /** Applies a delta to the local mirror in one transaction; idempotent, ignores already-applied sequence numbers. */
     private suspend fun applyDelta(m: Msg.Delta) {
         val cid = campaign
-        app.db.withTransaction {
-            if (m.full) app.backup.wipe(cid)
+        db.withTransaction {
+            if (m.full) backup.wipe(cid)
             var last = dao.campaign(cid)?.lastSeq ?: 0L
             for (c in m.changes) {
                 if (c.seq <= last && !m.full) continue

@@ -95,14 +95,14 @@ fun DmShell(campaignId: String, onExit: () -> Unit) {
             },
         )
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            AnimatedContent(if (charId != null) -1 else tab, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) }, label = "dmTab") { t ->
-                when (t) {
-                    -1 -> CharacterSheet(charId!!, onDeleted = { charId = null })
-                    0 -> Dashboard(campaignId, onOpenCharacter = { tab = 1; charId = it }, onTab = { tab = it })
-                    1 -> PartyScreen(campaignId, onOpen = { charId = it })
-                    2 -> EconomyScreen(campaignId)
-                    3 -> DiceScreen(campaignId)
-                    4 -> CombatScreen(campaignId)
+            AnimatedContent(charId to tab, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) }, label = "dmTab") { (cid, t) ->
+                when {
+                    cid != null -> CharacterSheet(cid, onDeleted = { charId = null })
+                    t == 0 -> Dashboard(campaignId, onOpenCharacter = { tab = 1; charId = it }, onTab = { tab = it })
+                    t == 1 -> PartyScreen(campaignId, onOpen = { charId = it })
+                    t == 2 -> EconomyScreen(campaignId)
+                    t == 3 -> DiceScreen(campaignId)
+                    t == 4 -> CombatScreen(campaignId)
                     else -> CampaignScreen(campaignId)
                 }
             }

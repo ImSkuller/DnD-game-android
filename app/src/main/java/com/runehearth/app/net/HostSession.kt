@@ -317,6 +317,9 @@ class HostSession(app: RunehearthApp, campaignId: String, private val deviceId: 
         _players.update { clients.values.map { ConnectedPlayer(it.deviceId, it.name, it.characterId, it.connectedAt) }.sortedBy { it.name } }
     }
 
+    /** Drops the TCP connection without telling the client (simulates a network failure); the client reconnects on its own. */
+    fun dropConnection(deviceId: String) { clients[deviceId]?.conn?.close() }
+
     /** Disconnects a player (DM tool). The device stays bound to its character and may rejoin with the code. */
     fun kick(deviceId: String) {
         clients[deviceId]?.let { scope.launch { runCatching { it.conn.send(Msg.Kick("Removed by the Dungeon Master")) }; it.conn.close() } }

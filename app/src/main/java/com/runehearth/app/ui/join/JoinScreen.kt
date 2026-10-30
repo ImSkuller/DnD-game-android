@@ -94,7 +94,7 @@ fun JoinScreen(onBack: () -> Unit, onJoined: (GameSession) -> Unit) {
                             val host = parts.getOrNull(0).orEmpty(); val port = parts.getOrNull(1)?.toIntOrNull() ?: 0
                             if (host.isNotEmpty() && port in 1..65535 && code.length == 6) scope.launch {
                                 app.prefs.setPlayerName(name); app.prefs.setLastHost(manual)
-                                val rs = RemoteSession(app, host, port, code, name.ifBlank { "Adventurer" }, app.prefs.deviceId())
+                                val rs = RemoteSession(app.db, app.backup, host, port, code, name.ifBlank { "Adventurer" }, app.prefs.deviceId())
                                 session = rs; rs.start()
                             }
                         }, Modifier.fillMaxWidth(), icon = RhIcon.WIFI, kind = BtnKind.GOLD, enabled = code.length == 6 && manual.contains(':'))
