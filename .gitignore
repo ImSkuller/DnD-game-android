@@ -1,0 +1,39 @@
+# Gradle / build
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Local config & secrets
+local.properties
+*.jks
+*.keystore
+keystore.properties
+secrets.properties
+google-services.json
+.env
+
+# IDE
+.idea/
+*.iml
+*.iws
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Generated / temp
+*.log
+*.tmp
+*.hprof
+tmp/
+.kotlin/
+/screenshots/
+
+# NOTE: CLAUDE.md and docs/ are intentionally tracked.
