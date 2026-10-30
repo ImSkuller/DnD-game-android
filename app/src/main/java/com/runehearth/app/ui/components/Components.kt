@@ -131,14 +131,18 @@ fun Panel(
     val t = Theme
     val ink = if (surface == Surface.PARCHMENT) t.ink else t.onDark
     val shape = RoundedCornerShape(10.dp)
+    val flat = com.runehearth.app.ui.theme.LocalPerf.current.flatPanels
+    val flatColor = when (surface) { Surface.PARCHMENT -> t.parchment; Surface.WOOD -> t.panel; Surface.STONE -> Color(0xFF4A4642); Surface.LEATHER -> Color(0xFF5A3920) }
     val base = modifier
         .let { if (onClick != null) it.pressable(onClick = onClick) else it }
         .clip(shape)
         .drawBehind {
             val r = CornerRadius(10.dp.toPx())
-            drawRoundRect(surfaceBrush(surface), cornerRadius = r)
-            // soft vignette to give depth
-            drawRoundRect(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.07f), Color.Transparent, Color.Black.copy(alpha = 0.28f))), cornerRadius = r)
+            if (flat) drawRoundRect(flatColor, cornerRadius = r) else {
+                drawRoundRect(surfaceBrush(surface), cornerRadius = r)
+                // soft vignette to give depth
+                drawRoundRect(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.07f), Color.Transparent, Color.Black.copy(alpha = 0.28f))), cornerRadius = r)
+            }
             val outer = Stroke(2.2.dp.toPx())
             drawRoundRect(glow ?: t.goldDark, cornerRadius = r, style = outer)
             val inset = 4.dp.toPx()

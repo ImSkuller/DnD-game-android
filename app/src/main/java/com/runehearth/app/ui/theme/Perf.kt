@@ -39,10 +39,12 @@ data class PerfSettings(
     val transitionMs: Int,
     val diceSpinMs: Int,
     val textureSizePx: Int,
+    /** Flat panels (no texture shader / vignette): much cheaper to draw on weak GPUs. */
+    val flatPanels: Boolean,
 ) {
     companion object {
-        val FULL = PerfSettings(PerfLevel.FULL, embers = true, animatedGlow = true, transitionMs = 260, diceSpinMs = 950, textureSizePx = 192)
-        val LITE = PerfSettings(PerfLevel.LITE, embers = false, animatedGlow = false, transitionMs = 90, diceSpinMs = 450, textureSizePx = 96)
+        val FULL = PerfSettings(PerfLevel.FULL, embers = true, animatedGlow = true, transitionMs = 260, diceSpinMs = 950, textureSizePx = 192, flatPanels = false)
+        val LITE = PerfSettings(PerfLevel.LITE, embers = false, animatedGlow = false, transitionMs = 90, diceSpinMs = 450, textureSizePx = 96, flatPanels = true)
     }
 }
 

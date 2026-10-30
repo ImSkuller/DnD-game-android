@@ -154,7 +154,12 @@ migrations, offline). Multiplayer: in-process loopback test (host+2 clients over
 disconnect/reconnect; real two-emulator/two-device manual script in README section. Performance: startup via
 `adb shell am start -W`, memory via `dumpsys meminfo`, frame stats via `dumpsys gfxinfo`, DB/sync timings in tests.
 
-## 13. Development milestones
+## 13. Development milestones (status)
+✅ 1 Init & docs · ✅ 2 Core/DB/engine · ✅ 3 Design system · ✅ 4 Navigation · ✅ 5 DM interface · ✅ 6 Player sheet ·
+✅ 7 Inventory/equipment · ✅ 8 Economy · ✅ 9 Dice/RNG · ✅ 10 Combat & campaign tools · ✅ 11 Local multiplayer (+DM
+controller, recovery) · ✅ 12 Asset library · ✅ 13 Animations & adaptive performance · 🚧 14 Testing/optimisation (see §16).
+
+Original milestone list:
 1. ✅ Project initialization & docs 2. Architecture/DB foundation 3. Design system & theme 4. Navigation
 5. DM interface 6. Player character system 7. Inventory & equipment 8. Economy 9. Dice & RNG
 10. Combat & campaign tools 11. Local multiplayer 12. Asset library 13. Animations & polish 14. Testing &
@@ -172,3 +177,66 @@ optimisation. (Executed as ≤25 commits, order adjusted so dependencies come fi
 - Decision log: ADR-1 native Kotlin; ADR-2 TCP+NSD instead of Nearby; ADR-3 procedural vector assets; ADR-4
   compacted change log instead of event replay; ADR-5 host-authoritative instead of majority comparison (the
   original "all phones compare stats" idea is replaced by digest verification against the host, per project rules).
+
+## 15. Addendum — as built
+
+### 15.1 Multiplayer roles (supersedes parts of §6/§7)
+- **Host** (`HostSession`): engine + Room + TCP server + mDNS. Two pairing codes per session: **player code** and **DM code**.
+- **Player** (`RemoteSession`): own character only; local mirror DB; incremental deltas filtered by audience.
+- **DM controller** (`RemoteSession(asDm=true)`, "I am the Dungeon Master" on the Join screen): DM permissions on a
+  *different* device than the host. On connect it receives the full-fidelity campaign (`SnapshotPart`s, ≤400 KB each) and
+  afterwards `DmDelta`s built from the engine's dirty-entity list (so DM-only data — NPCs, hidden purses, private notes —
+  is visible to the DM but never to players). All its actions are executed by the host engine as `Actor.dm`. Reconnect = fresh snapshot.
+- **Dedicated host mode** (`HostConsole`): the host phone shows a static, forced-LITE status page (codes, connections,
+  metrics). A co-op campaign card has a "host only" button.
+- Wire additions: `Auth.role`, `DmBound`, `SnapshotPart`, `DmDelta`, `Ping.rtt`.
+
+### 15.2 Host recovery & migration
+- Committed data is in SQLite (WAL) on the host and in every device's mirror; snapshots are written on session close
+  (`snapshots/<id>.json`, one rotation kept).
+- Players see an "host unreachable" banner and keep reconnecting with backoff; unacknowledged actions are re-sent and de-duplicated by action id.
+- **Choosing another host (explicit):** DM exports a *migration package* (DM Tools) or restores a snapshot; the target device
+  imports it (Home → Import / DM Tools → Restore). `BundleValidator` runs first (balances, references, equipment, level bounds,
+  **roll audit-chain verification**); errors abort with the original data untouched. On success the device becomes host,
+  `epoch+1`, change log rebuilt, members and the last 2000 acknowledged action ids are carried over, so re-sent actions are not
+  applied twice, and every client does a clean full resync. Nothing is elected automatically.
+
+### 15.3 Adaptive performance
+`PerfPolicy.resolve(AUTO|FULL|LITE, DeviceProfile)`: AUTO → LITE on low-RAM devices, ≤128 MB heap class, ≤4 cores on API ≤28, or API ≤26.
+LITE: no ember particles, static glow (no per-frame redraw), 90 ms transitions, 450 ms dice spin, 96 px textures, flat panels.
+`onTrimMemory` clears the vector-path cache. Setting: Settings → Performance.
+
+### 15.4 Host monitoring
+`HostMetrics` sampled every 2 s while hosting: heap/native memory, CPU% (process CPU time), average/worst action commit latency
+(`EngineStats`), update push time, connected devices, worst client RTT. `HostAdvisor` turns them into recommendations
+(memory, CPU, database, network, sync, low-end-with-many-players → "use a more capable host"). Shown in the DM session panel and host console.
+
+### 15.5 Dependencies actually used
+Compose (ui/foundation/animation/material3 base), Room + KSP, DataStore, kotlinx.serialization, coroutines, lifecycle-viewmodel/runtime-compose,
+activity-compose, core-ktx, profileinstaller (baseline profile). No network libraries, no image libraries, no Play Services.
+
+## 16. Measurements (honest status)
+Environment: Windows host, Android emulator (API 36, x86_64, software GPU), "LowEnd" AVD = 2 cores (the 1 GB RAM setting was
+not honoured by the emulator: guest reported 3 GB). **No physical devices were available.**
+- Release APK: **1.7 MB** (debug 12.9 MB). Zero raster assets; all art is procedural vector.
+- Cold start (`am start -W`), release build with baseline profile compiled: **≈1.4–2.0 s** on the 2-core software-rendered emulator
+  (≈3.1–3.7 s debug build). Real hardware is expected to be faster but this was **not measured**.
+- Memory (release, Home → sample campaign → DM hall): **TOTAL PSS ≈ 30 MB**, Java heap ≈ 6 MB, native ≈ 12 MB.
+- Loopback sync (instrumented tests, same device): host→player update **10–60 ms**; player action round trip **7–55 ms**; DM-controller
+  action + mirror update **9–15 ms**. Real Wi-Fi latency was **not measured**.
+- Frame pacing: median ≈ 65–70 ms/frame in both FULL and LITE on the software-rendered emulator at 1280×2856; this is dominated by the
+  emulator's CPU rasteriser and is **not** representative of real GPUs. A real-device jank measurement is outstanding (known gap).
+- Tests: 27 JVM unit tests (money, dice distribution/bias, stats, audience routing, frames/HMAC/replay, pairing, validator incl.
+  roll-history tampering, perf policy, host advisor) and 16 instrumented tests (engine transactions/permissions/duplicates/stale
+  edits/change-log compaction/backup, loopback multiplayer: sync, validation, wrong code, reconnect, digest repair, new-character join,
+  DM controller, host migration) — all passing on the emulator.
+
+## 17. Known limitations / technical debt
+- Real-device performance (start-up, jank, multi-phone Wi-Fi sync) is unmeasured; a Macrobenchmark module and baseline-profile generation are future work.
+- Frame-time claims above are emulator-only. The 1 GB constrained-RAM configuration could not be reproduced.
+- LAN traffic is authenticated (HMAC) but not encrypted. NSD discovery can fail on guest/isolated Wi-Fi (manual IP entry provided).
+- Android may stop a backgrounded host; a foreground service for the host is not implemented (keep the host screen open / plugged in).
+- Players see only their own character; no spectator or multi-character devices.
+- Item art is stylised vector art generated in code (20 colours × glow), not hand-painted illustration.
+- Player-side unacknowledged actions are kept in memory only (lost if the player app is killed mid-action).
+- Mirror databases of DM controllers contain the whole campaign (by design) and are not encrypted at rest.

@@ -33,6 +33,17 @@ These rules are permanent. Read `docs/implementation_plan.md` before making arch
 - Currency is stored as integer smallest units (bronze). No floating point money.
 - Dice use `java.security.SecureRandom` with unbiased bounded sampling. Never hand-rolled/predictable RNG.
 
+## Low-end device and host rules
+- Older / low-memory phones must remain usable, including as **host**. The host only runs the engine, database, validation,
+  networking and sync; it never renders gameplay visuals for other devices (each device renders its own UI).
+- `PerfPolicy` (AUTO/FULL/LITE) may reduce decoration only (embers, shimmer, transitions, texture size, textured panels).
+  **Never disable gameplay functionality** to save resources.
+- The Dungeon Master role and the host role can be on different devices (DM controller joins with the DM code and
+  keeps full DM permissions; the host validates everything).
+- Host recovery is explicit: restore a validated snapshot or import a migration package on the chosen device
+  (epoch bump, clients resync, acknowledged action ids preserved). Never elect a new host silently.
+- Monitor host health (memory, CPU, save latency, push latency, RTT) and recommend a stronger host when needed.
+
 ## Performance rules
 - Optimise startup (no work before first frame that can be deferred; DB opened lazily off the main thread).
 - Minimise allocations in hot paths (draw code, lists, sync frames).

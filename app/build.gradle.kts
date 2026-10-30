@@ -53,6 +53,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.4")
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
+    // installs the bundled baseline profile (AOT-compiles hot start-up paths) on devices without Play Store profile delivery
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     val room = "2.8.1"
     implementation("androidx.room:room-runtime:$room")
