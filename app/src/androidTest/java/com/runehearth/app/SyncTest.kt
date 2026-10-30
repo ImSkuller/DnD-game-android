@@ -147,4 +147,58 @@ class SyncTest {
         waitFor { clientDb.dao().character(id) }
         assertEquals("Fresh Face", app.db.dao().character(id)!!.name)
     }
+
+    private fun connectDm(device: String, db: GameDatabase, code: String = host.dmCode.value): RemoteSession {
+        val port = host.address.value.substringAfterLast(':').toInt()
+        return RemoteSession(db, Backup(db), "127.0.0.1", port, code, "The DM", device, asDm = true).also { sessions += it; it.start() }
+    }
+
+    @Test fun dmControllerOnASeparateDeviceHasFullControl() = runBlocking<Unit> {
+        val npcId = UUID.randomUUID().toString()
+        app.engine.execute(cid, Actor.dm("dm"), Action.UpsertCharacter(u("npc"), GameCharacter(npcId, cid, "Secret NPC", isNpc = true)))
+        app.engine.execute(cid, Actor.dm("dm"), Action.SetWalletHidden(u("hide"), Wallet.personalId(heroId), true))
+        val dmDb = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext<Context>(), GameDatabase::class.java).allowMainThreadQueries().build()
+        try {
+            val s = connectDm("dm-ctrl", dmDb)
+            waitFor { s.ready.value.takeIf { it } }
+            assertTrue(s.isDm)
+            // the controller sees DM-only data that players never receive
+            assertNotNull(dmDb.dao().character(npcId))
+            assertNotNull(dmDb.dao().wallet(Wallet.personalId(heroId)))
+            assertFalse(dmDb.dao().campaign(cid)!!.isHost)
+            // its actions run with DM rights on the host and flow back into its mirror
+            val t0 = System.nanoTime()
+            val r = s.submit(Action.AdjustWallet(u("adj"), Wallet.partyId(cid), 700, "dm reward"))
+            assertTrue(r.message, r.ok)
+            assertEquals(700L, app.db.dao().wallet(Wallet.partyId(cid))!!.balance)
+            waitFor { dmDb.dao().wallet(Wallet.partyId(cid))?.takeIf { it.balance == 700L } }
+            Log.i("SyncTest", "DM controller action + mirror update = ${(System.nanoTime() - t0) / 1_000_000} ms")
+            // a player cannot become DM with the player code
+            val bad = connectDm("dm-evil", dmDb, code = host.code.value)
+            assertTrue(waitFor { bad.error.value }.contains("code", ignoreCase = true))
+        } finally { dmDb.close() }
+        Unit
+    }
+
+    @Test fun hostMigrationValidatesBumpsEpochAndKeepsAcknowledgedActions() = runBlocking<Unit> {
+        val actionId = u("pay")
+        assertTrue(app.engine.execute(cid, Actor.dm("dm"), Action.AdjustWallet(actionId, Wallet.partyId(cid), 1000, "x")).ok)
+        val backup = Backup(app.db)
+        val text = backup.export(cid)
+        val epochBefore = app.db.dao().campaign(cid)!!.epoch
+        // the old host dies; a new device imports the validated package and becomes the host
+        host.stopHosting()
+        backup.wipe(cid)
+        backup.import(text, takeOverHostFor = "new-host-device")
+        val camp = app.db.dao().campaign(cid)!!
+        assertEquals(epochBefore + 1, camp.epoch); assertTrue(camp.isHost); assertEquals("new-host-device", camp.hostDeviceId)
+        // a player re-sending an action the old host had already acknowledged must not pay twice
+        val again = app.engine.execute(cid, Actor.dm("dm"), Action.AdjustWallet(actionId, Wallet.partyId(cid), 1000, "x"))
+        assertTrue(again.ok)
+        assertEquals(1000L, app.db.dao().wallet(Wallet.partyId(cid))!!.balance)
+        // a tampered package is refused and existing data is untouched
+        val forged = text.replace("\"balance\":1000", "\"balance\":-5")
+        try { backup.import(forged); throw AssertionError("forged package accepted") } catch (e: com.runehearth.app.data.ImportException) { /* expected */ }
+        assertEquals(1000L, app.db.dao().wallet(Wallet.partyId(cid))!!.balance)
+    }
 }

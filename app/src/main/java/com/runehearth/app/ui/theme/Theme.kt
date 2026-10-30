@@ -12,6 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
@@ -102,8 +104,11 @@ val Theme: ThemeTokens @Composable get() = LocalTheme.current
 
 @Composable
 fun RunehearthTheme(tokens: ThemeTokens = MedievalTheme, content: @Composable () -> Unit) {
-    val transition = rememberInfiniteTransition(label = "glow")
-    val phase = transition.animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing), RepeatMode.Restart), label = "glowPhase")
+    val perf = LocalPerf.current
+    val phase: State<Float> = if (perf.animatedGlow) {
+        val transition = rememberInfiniteTransition(label = "glow")
+        transition.animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing), RepeatMode.Restart), label = "glowPhase")
+    } else remember { mutableFloatStateOf(0.3f) }
     val scheme = darkColorScheme(
         primary = tokens.gold, onPrimary = tokens.ink, secondary = tokens.emerald, background = tokens.background, onBackground = tokens.onDark,
         surface = tokens.panel, onSurface = tokens.onDark, error = tokens.crimson,

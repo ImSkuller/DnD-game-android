@@ -20,7 +20,8 @@ import kotlin.random.Random
  * No texture files are shipped; total memory ≈ 4 × 144 KB once used.
  */
 object Textures {
-    private const val SIZE = 192
+    /** Set once at start-up from the performance level (smaller tiles on low-memory devices). */
+    @Volatile var SIZE = 192
 
     private fun make(seed: Int, draw: androidx.compose.ui.graphics.drawscope.DrawScope.(Random) -> Unit): Brush {
         val bmp = ImageBitmap(SIZE, SIZE)

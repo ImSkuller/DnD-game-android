@@ -24,6 +24,8 @@ sealed interface Route {
     data class Dm(val campaignId: String) : Route
     /** Player shell (co-op client). */
     data class Player(val campaignId: String) : Route
+    /** Dedicated host mode: engine + network only, no DM interface. */
+    data class HostConsole(val campaignId: String) : Route
 }
 
 val LocalApp = staticCompositionLocalOf<RunehearthApp> { error("no app") }
@@ -42,7 +44,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun pop(): Boolean {
         if (stack.size <= 1) return false
         val r = stack.removeAt(stack.lastIndex)
-        if (r is Route.Dm || r is Route.Player) closeSession()
+        if (r is Route.Dm || r is Route.Player || r is Route.HostConsole) closeSession()
         return true
     }
     fun replaceTop(r: Route) { stack[stack.lastIndex] = r }
@@ -54,6 +56,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val device = app.prefs.deviceId()
             session = if (camp.mode == CampaignMode.COOP && camp.isHost) HostSession(app, campaignId, device) else LocalSession(app, campaignId, device)
             push(Route.Dm(campaignId))
+        }
+    }
+
+    fun openHostConsole(campaignId: String) {
+        viewModelScope.launch {
+            closeSession()
+            val device = app.prefs.deviceId()
+            session = HostSession(app, campaignId, device)
+            push(Route.HostConsole(campaignId))
         }
     }
 

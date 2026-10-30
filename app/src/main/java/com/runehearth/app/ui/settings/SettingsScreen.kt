@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Row
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import com.runehearth.app.ui.theme.PerfPreference
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +52,20 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Chip("Medieval Fantasy", true, {})
                     Spacer(Modifier.height(4.dp))
                     RhText("More themes can be added later without changing any screen.", style = Theme.small)
+                }
+            }
+            item {
+                val perf by app.perf.collectAsState()
+                var pref by remember { mutableStateOf(app.perfPreference) }
+                val d = app.deviceProfile
+                Panel(Modifier.fillMaxWidth()) {
+                    SectionHeader("Performance")
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PerfPreference.entries.forEach { p -> Chip(when (p) { PerfPreference.AUTO -> "Auto"; PerfPreference.FULL -> "Full effects"; PerfPreference.LITE -> "Lite" }, pref == p, { pref = p; app.perfPreference = p }) }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    RhText("Active: ${perf.level.name.lowercase()} · ${d.memoryClassMb} MB heap · ${d.cores} cores · Android ${d.sdk}${if (d.lowRam) " · low-RAM device" else ""}", style = Theme.small)
+                    RhText("Lite mode turns off ember particles, shimmer animation and long transitions and uses smaller textures. Gameplay is never reduced. Texture size applies after a restart.", style = Theme.small)
                 }
             }
             item {

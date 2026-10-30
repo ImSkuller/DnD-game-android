@@ -51,8 +51,8 @@ data class Snapshot(val payload: String, val audience: String, val visible: Bool
 object EntityStore {
     val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
-    suspend fun snapshot(dao: GameDao, type: EntityType, id: String): Snapshot? = when (type) {
-        EntityType.CAMPAIGN -> dao.campaign(id)?.let { Snapshot(json.encodeToString(Campaign.serializer(), it.forWire()), Aud.ALL, true) }
+    suspend fun snapshot(dao: GameDao, type: EntityType, id: String, full: Boolean = false): Snapshot? = when (type) {
+        EntityType.CAMPAIGN -> dao.campaign(id)?.let { Snapshot(json.encodeToString(Campaign.serializer(), if (full) it else it.forWire()), Aud.ALL, true) }
         EntityType.CHARACTER -> dao.character(id)?.let {
             Snapshot(json.encodeToString(GameCharacter.serializer(), it), it.id, !it.isNpc)
         }

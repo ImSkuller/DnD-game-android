@@ -84,7 +84,7 @@ fun RunehearthEmblem(size: Dp, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun HomeScreen(onOpen: (Campaign) -> Unit, onJoin: () -> Unit, onSettings: () -> Unit, onAssets: () -> Unit) {
+fun HomeScreen(onOpen: (Campaign) -> Unit, onHostOnly: (Campaign) -> Unit, onJoin: () -> Unit, onSettings: () -> Unit, onAssets: () -> Unit) {
     val app = LocalApp.current
     val dao = rememberDao()
     val campaigns by rememberFlow("campaigns", emptyList()) { dao.observeCampaigns() }
@@ -108,9 +108,9 @@ fun HomeScreen(onOpen: (Campaign) -> Unit, onJoin: () -> Unit, onSettings: () ->
         if (uri != null) scope.launch {
             runCatching {
                 val text = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)?.use { String(it.readBytes()) } ?: error("empty file") }
-                val id = app.backup.import(text)
+                val id = app.backup.import(text, takeOverHostFor = app.prefs.deviceId())
                 app.engine.rebuildChangeLog(id)
-            }.onSuccess { toaster.show("Campaign imported") }.onFailure { toaster.show("Import failed: ${it.message}", true) }
+            }.onSuccess { toaster.show("Campaign imported — this device is now its host") }.onFailure { toaster.show("Import refused: ${it.message}", true) }
         }
     }
 
@@ -145,6 +145,7 @@ fun HomeScreen(onOpen: (Campaign) -> Unit, onJoin: () -> Unit, onSettings: () ->
                             RhText(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(c.updatedAt)), style = Theme.small)
                         }
                     }
+                    if (c.mode == CampaignMode.COOP) com.runehearth.app.ui.components.RhIconButton(RhIcon.WIFI, { onHostOnly(c) }, tint = Color(0xFF8CCB5A), size = 20.dp)
                     com.runehearth.app.ui.components.RhIconButton(RhIcon.SHARE, { exporting = c; exportLauncher.launch("${c.name.replace(Regex("[^A-Za-z0-9_-]"), "_")}.rhcamp.json") }, tint = Theme.onDarkSoft, size = 20.dp)
                     com.runehearth.app.ui.components.RhIconButton(RhIcon.TRASH, { deleting = c }, tint = Color(0xFFD35B52), size = 20.dp)
                 }

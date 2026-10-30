@@ -176,6 +176,9 @@ interface GameDao {
     @Query("SELECT * FROM roll WHERE campaignId = :cid")
     suspend fun allRolls(cid: String): List<RollRecord>
 
+    @Query("SELECT * FROM processed_action ORDER BY ts DESC LIMIT 2000")
+    suspend fun recentProcessed(): List<ProcessedAction>
+
     // ---- change log / members / processed actions
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(c: Change)

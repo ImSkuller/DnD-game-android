@@ -21,6 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import com.runehearth.app.engine.ChangeBatch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -39,7 +41,7 @@ import java.security.SecureRandom
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 
-data class ConnectedPlayer(val deviceId: String, val name: String, val characterId: String?, val connectedAt: Long)
+data class ConnectedPlayer(val deviceId: String, val name: String, val characterId: String?, val connectedAt: Long, val isDm: Boolean = false, val rttMs: Long = -1)
 
 /** Authenticated, framed connection used by both host and client code. */
 class Conn(private val socket: Socket) {
@@ -82,11 +84,19 @@ class HostSession(app: RunehearthApp, campaignId: String, private val deviceId: 
     private var nsd: NsdManager? = null
     private var registration: NsdManager.RegistrationListener? = null
     private val clients = ConcurrentHashMap<String, ClientHandle>()
+    private val dmClients = ConcurrentHashMap<String, ClientHandle>()
+    private val sampler = MetricsSampler()
+    @Volatile private var syncMsAvg = 0.0
     private val failures = ArrayDeque<Long>()
     private val rng = SecureRandom()
 
     private val _code = MutableStateFlow("")
     val code: StateFlow<String> = _code
+    private val _dmCode = MutableStateFlow("")
+    /** Pairing code for a Dungeon Master controller device (the DM running the game from a different phone than the host). */
+    val dmCode: StateFlow<String> = _dmCode
+    private val _metrics = MutableStateFlow(HostMetrics())
+    val metrics: StateFlow<HostMetrics> = _metrics
     private val _address = MutableStateFlow("")
     val address: StateFlow<String> = _address
     private val _players = MutableStateFlow<List<ConnectedPlayer>>(emptyList())
@@ -95,8 +105,9 @@ class HostSession(app: RunehearthApp, campaignId: String, private val deviceId: 
     val hosting: StateFlow<Boolean> = _hosting
     private var broadcastJob: Job? = null
 
-    private class ClientHandle(val deviceId: String, val name: String, val conn: Conn, val job: Job) {
+    private class ClientHandle(val deviceId: String, val name: String, val conn: Conn, val job: Job, val isDm: Boolean = false) {
         @Volatile var characterId: String? = null
+        @Volatile var rttMs: Long = -1
         val connectedAt = System.currentTimeMillis()
     }
 
@@ -106,16 +117,30 @@ class HostSession(app: RunehearthApp, campaignId: String, private val deviceId: 
         val ss = try { ServerSocket().apply { reuseAddress = true; bind(InetSocketAddress(0)) } } catch (e: IOException) { return false }
         server = ss
         _code.value = "%06d".format(rng.nextInt(1_000_000))
+        _dmCode.value = newDistinctCode(_code.value)
         _address.value = "${NetUtil.localAddress() ?: "?"}:${ss.localPort}"
         _hosting.value = true
         state.value = ConnectionState.HOSTING
         scope.launch { acceptLoop(ss) }
-        broadcastJob = scope.launch { app.engine.changes.collect { batch -> if (batch.campaignId == campaignId) broadcast(batch.changes) } }
+        broadcastJob = scope.launch { app.engine.changes.collect { batch -> if (batch.campaignId == campaignId) { broadcast(batch.changes); broadcastDm(batch) } } }
         scope.launch { registerService(ss.localPort) }
+        scope.launch { while (isActive) { delay(2000); sampleMetrics() } }
         return true
     }
 
-    fun regenerateCode() { _code.value = "%06d".format(rng.nextInt(1_000_000)) }
+    private fun newDistinctCode(other: String): String {
+        var c: String
+        do { c = "%06d".format(rng.nextInt(1_000_000)) } while (c == other)
+        return c
+    }
+
+    fun regenerateCode() { _code.value = newDistinctCode(_dmCode.value) }
+
+    private fun sampleMetrics() {
+        val (avg, max, n) = app.engine.stats.snapshot()
+        val worst = (clients.values + dmClients.values).maxOfOrNull { it.rttMs } ?: -1L
+        _metrics.value = sampler.sample(avg, max, n, syncMsAvg, clients.size + dmClients.size, worst)
+    }
 
     fun stopHosting() {
         if (!_hosting.value) return
@@ -125,8 +150,8 @@ class HostSession(app: RunehearthApp, campaignId: String, private val deviceId: 
         runCatching { server?.close() }
         server = null
         unregisterService()
-        clients.values.forEach { it.conn.close(); it.job.cancel() }
-        clients.clear()
+        (clients.values + dmClients.values).forEach { it.conn.close(); it.job.cancel() }
+        clients.clear(); dmClients.clear()
         _players.value = emptyList()
     }
 
@@ -187,13 +212,15 @@ class HostSession(app: RunehearthApp, campaignId: String, private val deviceId: 
             conn.send(Msg.Challenge(PROTOCOL_VERSION, hostNonce, camp.id, camp.name, camp.epoch))
             val auth = conn.receive() as? Msg.Auth ?: return
             if (tooManyFailures()) { conn.send(Msg.Denied("Too many attempts. Wait a minute and try again.")); return }
-            val expected = Pairing.proof(_code.value, hostNonce, auth.nonce, auth.deviceId)
+            val code = if (auth.role == "dm") _dmCode.value else _code.value
+            val expected = Pairing.proof(code, hostNonce, auth.nonce, auth.deviceId)
             if (!Pairing.verify(expected, auth.proof)) {
                 synchronized(failures) { failures.addLast(System.currentTimeMillis()) }
                 conn.send(Msg.Denied("Wrong pairing code")); return
             }
-            conn.authenticate(Pairing.sessionKey(_code.value, hostNonce, auth.nonce))
+            conn.authenticate(Pairing.sessionKey(code, hostNonce, auth.nonce))
             val name = auth.name.trim().take(40).ifEmpty { "Adventurer" }
+            if (auth.role == "dm") { handleDm(conn, auth, name); return }
 
             // bind device -> character
             var member = dao.member(campaignId, auth.deviceId)
@@ -230,6 +257,35 @@ class HostSession(app: RunehearthApp, campaignId: String, private val deviceId: 
         } catch (_: kotlinx.serialization.SerializationException) {
         } finally {
             handle?.let { if (clients[it.deviceId] === it) clients.remove(it.deviceId); publishPlayers() }
+            conn.close()
+        }
+    }
+
+    /** A Dungeon Master controller device: full-fidelity snapshot, then incremental updates; its actions run with DM rights. */
+    private suspend fun handleDm(conn: Conn, auth: Msg.Auth, name: String) {
+        var h: ClientHandle? = null
+        try {
+            h = ClientHandle(auth.deviceId, name, conn, kotlin.coroutines.coroutineContext[Job]!!, isDm = true)
+            dmClients.put(auth.deviceId, h)?.let { old -> old.conn.close(); old.job.cancel() }
+            publishPlayers()
+            val camp = dao.campaign(campaignId)!!
+            conn.send(Msg.DmBound(camp.lastSeq, camp.epoch))
+            val text = app.backup.export(campaignId)
+            val parts = text.chunked(400_000)
+            parts.forEachIndexed { i, p -> conn.send(Msg.SnapshotPart(i, parts.size, p)) }
+            conn.send(Msg.ActResult(ActionResult("hello", true, "synced", seq = camp.lastSeq)))
+            val dmActor = Actor.dm(auth.deviceId)
+            while (scope.isActive) {
+                when (val m = conn.receive()) {
+                    is Msg.Act -> conn.send(Msg.ActResult(app.engine.execute(campaignId, dmActor, m.action)))
+                    is Msg.Ping -> { h.rttMs = m.rtt; conn.send(Msg.Pong(m.t)) }
+                    else -> {}
+                }
+            }
+        } catch (_: IOException) {
+        } catch (_: kotlinx.serialization.SerializationException) {
+        } finally {
+            h?.let { if (dmClients[it.deviceId] === it) dmClients.remove(it.deviceId); publishPlayers() }
             conn.close()
         }
     }
@@ -277,8 +333,25 @@ class HostSession(app: RunehearthApp, campaignId: String, private val deviceId: 
         }
     }
 
+    private suspend fun broadcastDm(batch: ChangeBatch) {
+        if (dmClients.isEmpty() || batch.dirty.isEmpty()) return
+        val wire = batch.dirty.map { (type, id) ->
+            val snap = EntityStore.snapshot(dao, type, id, full = true)
+            WireChange(type.name, id, batch.seq, snap?.payload ?: "", delete = snap == null)
+        }
+        for (h in dmClients.values) runCatching { h.conn.send(Msg.DmDelta(wire, batch.seq)) }
+    }
+
     private suspend fun broadcast(changes: List<com.runehearth.app.data.Change>) {
         if (changes.isEmpty()) return
+        val started = System.nanoTime()
+        try { broadcastPlayers(changes) } finally {
+            val ms = (System.nanoTime() - started) / 1e6
+            syncMsAvg = if (syncMsAvg == 0.0) ms else syncMsAvg * 0.8 + ms * 0.2
+        }
+    }
+
+    private suspend fun broadcastPlayers(changes: List<com.runehearth.app.data.Change>) {
         val top = changes.maxOf { it.seq }
         for (h in clients.values) {
             val cid = h.characterId ?: continue
@@ -301,7 +374,7 @@ class HostSession(app: RunehearthApp, campaignId: String, private val deviceId: 
                     val result = app.engine.execute(campaignId, Actor(false, cid, h.deviceId), m.action)
                     conn.send(Msg.ActResult(result))
                 }
-                is Msg.Ping -> conn.send(Msg.Pong(m.t))
+                is Msg.Ping -> { h.rttMs = m.rtt; conn.send(Msg.Pong(m.t)) }
                 is Msg.DigestReport -> {
                     val camp = dao.campaign(campaignId)
                     if (camp != null && camp.lastSeq == m.seq && EntityStore.ownedDigest(dao, cid) != m.digest) {
@@ -314,15 +387,17 @@ class HostSession(app: RunehearthApp, campaignId: String, private val deviceId: 
     }
 
     private fun publishPlayers() {
-        _players.update { clients.values.map { ConnectedPlayer(it.deviceId, it.name, it.characterId, it.connectedAt) }.sortedBy { it.name } }
+        _players.update {
+            (clients.values + dmClients.values).map { ConnectedPlayer(it.deviceId, it.name, it.characterId, it.connectedAt, it.isDm, it.rttMs) }.sortedBy { it.name }
+        }
     }
 
     /** Drops the TCP connection without telling the client (simulates a network failure); the client reconnects on its own. */
-    fun dropConnection(deviceId: String) { clients[deviceId]?.conn?.close() }
+    fun dropConnection(deviceId: String) { (clients[deviceId] ?: dmClients[deviceId])?.conn?.close() }
 
     /** Disconnects a player (DM tool). The device stays bound to its character and may rejoin with the code. */
     fun kick(deviceId: String) {
-        clients[deviceId]?.let { scope.launch { runCatching { it.conn.send(Msg.Kick("Removed by the Dungeon Master")) }; it.conn.close() } }
+        (clients[deviceId] ?: dmClients[deviceId])?.let { scope.launch { runCatching { it.conn.send(Msg.Kick("Removed by the Dungeon Master")) }; it.conn.close() } }
     }
 }
 

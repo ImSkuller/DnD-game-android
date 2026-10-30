@@ -161,6 +161,7 @@ private fun Dashboard(campaignId: String, onOpenCharacter: (String) -> Unit, onT
     var tools by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (host != null) item { SessionPanel(host) }
+        else if (session is com.runehearth.app.net.RemoteSession) item { ControllerPanel(session) }
         else item {
             Panel(Modifier.fillMaxWidth()) {
                 RhText("Local Only campaign", style = Theme.heading)
@@ -192,9 +193,12 @@ private fun Dashboard(campaignId: String, onOpenCharacter: (String) -> Unit, onT
 private fun SessionPanel(host: HostSession) {
     val hosting by host.hosting.collectAsState()
     val code by host.code.collectAsState()
+    val dmCode by host.dmCode.collectAsState()
     val address by host.address.collectAsState()
     val players by host.players.collectAsState()
+    val metrics by host.metrics.collectAsState()
     val toaster = LocalToaster.current
+    var showHealth by remember { mutableStateOf(false) }
     Panel(Modifier.fillMaxWidth(), glow = if (hosting) Color(0xFF5CB85C) else null) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             RhIconView2(hosting)
@@ -206,29 +210,35 @@ private fun SessionPanel(host: HostSession) {
         }
         Spacer(Modifier.height(8.dp))
         if (hosting) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) { RhText("PAIRING CODE", style = Theme.label.copy(fontSize = 10.sp)); RhText(code, style = Theme.title.copy(fontSize = 34.sp, letterSpacing = 6.sp), color = Theme.gold) }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) { RhText("ADDRESS", style = Theme.label.copy(fontSize = 10.sp)); RhText(address, style = Theme.heading.copy(fontSize = 17.sp)) }
-            }
+            CodesRow(code, dmCode, address)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 WoodButton("New code", { host.regenerateCode() }, compact = true, kind = BtnKind.SECONDARY)
+                WoodButton("Health", { showHealth = !showHealth }, compact = true, kind = BtnKind.SECONDARY)
                 WoodButton("Close session", { host.stopHosting() }, compact = true, kind = BtnKind.DANGER)
             }
             Spacer(Modifier.height(8.dp))
-            RhText("CONNECTED (${players.size})", style = Theme.label.copy(fontSize = 10.sp))
-            if (players.isEmpty()) RhText("Waiting for players…", style = Theme.small)
-            players.forEach { p ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Box(Modifier.size(8.dp).androidxBg(Color(0xFF5CB85C)))
-                    Spacer(Modifier.size(8.dp))
-                    RhText(p.name, Modifier.weight(1f))
-                    RhIconButton(RhIcon.CLOSE, { host.kick(p.deviceId) }, tint = Theme.onDarkSoft, size = 16.dp)
-                }
-            }
+            ConnectedList(players, host)
+            if (showHealth) { Spacer(Modifier.height(8.dp)); HostMetricsView(metrics) }
         } else {
             WoodButton("Open session", { if (!host.startHosting()) toaster.show("Could not open the network port", true) }, Modifier.fillMaxWidth(), icon = RhIcon.WIFI, kind = BtnKind.GOLD, compact = true)
         }
+    }
+}
+
+@Composable
+private fun ControllerPanel(remote: com.runehearth.app.net.RemoteSession) {
+    val state by remote.connection.collectAsState()
+    val latency by remote.latencyMs.collectAsState()
+    Panel(Modifier.fillMaxWidth(), glow = if (state == ConnectionState.CONNECTED) Color(0xFF8CCB5A) else Color(0xFFE48A3C)) {
+        RhText("Controlling a remote host", style = Theme.heading)
+        RhText(
+            when (state) {
+                ConnectionState.CONNECTED -> "Connected${if (latency >= 0) " · $latency ms" else ""}. The host device validates and stores everything you do."
+                else -> "Reconnecting to the host… Your view is saved on this device and refreshes when the link returns."
+            },
+            style = Theme.small,
+        )
     }
 }
 

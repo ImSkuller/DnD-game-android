@@ -29,6 +29,8 @@ sealed interface Msg {
     @Serializable @SerialName("auth") data class Auth(
         val deviceId: String, val name: String, val nonce: String, val proof: String,
         val lastSeq: Long, val epoch: Int, val claimId: String? = null, val newName: String? = null,
+        /** `player` (default) or `dm`: a Dungeon Master controller device that does not host. */
+        val role: String = "player",
     ) : Msg
     @Serializable @SerialName("denied") data class Denied(val reason: String) : Msg
 
@@ -40,7 +42,12 @@ sealed interface Msg {
     @Serializable @SerialName("act") data class Act(val action: Action) : Msg
     @Serializable @SerialName("actResult") data class ActResult(val result: ActionResult) : Msg
     @Serializable @SerialName("digest") data class DigestReport(val seq: Long, val digest: Long) : Msg
-    @Serializable @SerialName("ping") data class Ping(val t: Long) : Msg
+    /** DM controller: the session is bound; a full snapshot (in parts) follows. */
+    @Serializable @SerialName("dmBound") data class DmBound(val hostSeq: Long, val epoch: Int) : Msg
+    @Serializable @SerialName("snapPart") data class SnapshotPart(val index: Int, val total: Int, val data: String) : Msg
+    /** DM controller incremental update: full-fidelity entity payloads, regardless of player visibility. */
+    @Serializable @SerialName("dmDelta") data class DmDelta(val changes: List<WireChange>, val toSeq: Long) : Msg
+    @Serializable @SerialName("ping") data class Ping(val t: Long, val rtt: Long = -1) : Msg
     @Serializable @SerialName("pong") data class Pong(val t: Long) : Msg
     @Serializable @SerialName("kick") data class Kick(val reason: String) : Msg
 }

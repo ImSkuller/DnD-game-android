@@ -31,7 +31,22 @@ import java.util.UUID
 /** Thrown by validation; rolls back the whole transaction and becomes a failed [ActionResult]. */
 class Reject(message: String) : Exception(message)
 
-data class ChangeBatch(val campaignId: String, val changes: List<Change>)
+/** [changes] are the player-visible change rows; [dirty] lists every entity touched (used to feed a DM controller device). */
+data class ChangeBatch(val campaignId: String, val changes: List<Change>, val dirty: List<Pair<EntityType, String>> = emptyList(), val seq: Long = 0)
+
+/** Rolling execution-time statistics of the engine (database + validation latency per action). */
+class EngineStats {
+    private val ring = LongArray(64)
+    private var n = 0
+    @Synchronized fun record(nanos: Long) { ring[n % ring.size] = nanos; n++ }
+    @Synchronized fun snapshot(): Triple<Double, Double, Int> {
+        val c = minOf(n, ring.size)
+        if (c == 0) return Triple(0.0, 0.0, 0)
+        var sum = 0L; var max = 0L
+        for (i in 0 until c) { sum += ring[i]; if (ring[i] > max) max = ring[i] }
+        return Triple(sum / c / 1e6, max / 1e6, n)
+    }
+}
 
 /**
  * The single writer for game state. Executes [Action]s atomically (one DB transaction each), serialised by a mutex,
@@ -50,10 +65,12 @@ class ActionEngine(
 
     /** Emits the changes of every successfully applied action (the host forwards them to clients). */
     val changes: SharedFlow<ChangeBatch> = _changes
+    val stats = EngineStats()
 
     suspend fun execute(campaignId: String, actor: Actor, action: Action): ActionResult = mutex.withLock {
         dao.processed(action.id)?.let { return ActionResult(action.id, it.ok, it.message, seq = it.seqAfter.toLongOrNull() ?: 0) }
         val ctx = Ctx(campaignId, actor)
+        val started = System.nanoTime()
         val result = try {
             val r = db.withTransaction {
                 ctx.camp = dao.campaign(campaignId) ?: throw Reject("Campaign not found")
@@ -61,7 +78,8 @@ class ActionEngine(
                 val seq = ctx.flush()
                 partial.copy(seq = seq)
             }
-            _changes.tryEmit(ChangeBatch(campaignId, ctx.emitted))
+            stats.record(System.nanoTime() - started)
+            _changes.tryEmit(ChangeBatch(campaignId, ctx.emitted, ctx.dirtyList(), r.seq))
             r
         } catch (e: Reject) {
             ActionResult(action.id, false, e.message ?: "Rejected")
@@ -105,6 +123,7 @@ class ActionEngine(
         val emitted = ArrayList<Change>()
 
         fun mark(type: EntityType, id: String) { dirty.add(type to id) }
+        fun dirtyList(): List<Pair<EntityType, String>> = dirty.toList()
         fun reject(msg: String): Nothing = throw Reject(msg)
         private fun requireDm() { if (!actor.isDm) reject("Only the Dungeon Master can do that") }
         private fun requireSelfOrDm(characterId: String) {

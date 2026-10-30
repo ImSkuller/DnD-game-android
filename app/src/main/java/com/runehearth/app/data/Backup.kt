@@ -21,6 +21,10 @@ data class CampaignBundle(
     val encounters: List<Encounter> = emptyList(),
     val combatants: List<Combatant> = emptyList(),
     val rolls: List<RollRecord> = emptyList(),
+    /** Device ↔ character bindings, so players keep their identity after a restore or host migration. */
+    val members: List<Member> = emptyList(),
+    /** Recently acknowledged action ids, so actions re-sent after a host change are not applied twice. */
+    val processed: List<ProcessedAction> = emptyList(),
 )
 
 /** Export / import / local snapshots. Import replaces a campaign with the same id in a single transaction. */
@@ -44,18 +48,32 @@ class Backup(private val db: GameDatabase) {
             encounters = encs,
             combatants = encs.flatMap { dao.combatants(it.id) },
             rolls = dao.allRolls(campaignId),
+            members = dao.members(campaignId),
+            processed = dao.recentProcessed(),
         )
         return json.encodeToString(CampaignBundle.serializer(), bundle)
     }
 
-    /** Returns the imported campaign id. Throws on malformed input without modifying existing data. */
-    suspend fun import(text: String): String {
-        val b = json.decodeFromString(CampaignBundle.serializer(), text)
-        require(b.format == 1) { "Unsupported backup format ${b.format}" }
+    /**
+     * Imports a bundle, replacing any campaign with the same id, in one transaction. The bundle is validated first
+     * ([ImportException] on errors; existing data is untouched). With [takeOverHostFor] this device becomes the
+     * authoritative host and the epoch is bumped so every client performs a clean full resync.
+     * Returns the imported campaign id.
+     */
+    suspend fun import(text: String, validate: Boolean = true, takeOverHostFor: String? = null): String {
+        var b = json.decodeFromString(CampaignBundle.serializer(), text)
+        if (validate) {
+            val issues = BundleValidator.validate(b)
+            if (issues.any { it.severity == Severity.ERROR }) throw ImportException(issues)
+        }
+        if (takeOverHostFor != null) b = b.copy(campaign = b.campaign.copy(isHost = true, hostDeviceId = takeOverHostFor, epoch = b.campaign.epoch + 1, updatedAt = System.currentTimeMillis()))
         val cid = b.campaign.id
         db.withTransaction {
             wipe(cid)
             dao.upsert(b.campaign)
+            b.members.forEach { dao.upsert(it) }
+            b.processed.forEach { dao.upsert(it) }
+            if (b.wallets.none { it.ownerId == null }) dao.upsert(Wallet(Wallet.partyId(cid), cid, null))
             b.characters.forEach { dao.upsert(it) }
             b.items.forEach { dao.upsert(it) }
             b.skills.forEach { dao.upsert(it) }
@@ -102,6 +120,10 @@ class Backup(private val db: GameDatabase) {
         tmp.writeText(text)
         if (!tmp.renameTo(f)) { f.writeText(text); tmp.delete() } // atomic replace; fall back to direct write
     }
+
+    /** Snapshot files for a campaign, newest first. */
+    fun snapshots(dir: File, campaignId: String): List<File> =
+        listOf(File(dir, "$campaignId.json"), File(dir, "$campaignId.prev.json")).filter { it.exists() && it.length() > 0 }.sortedByDescending { it.lastModified() }
 
     fun newId(): String = UUID.randomUUID().toString()
 }

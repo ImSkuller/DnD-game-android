@@ -260,6 +260,7 @@ data class Change(
     val deleted: Boolean = false,
 )
 
+@Serializable
 @Entity(tableName = "member", primaryKeys = ["campaignId", "deviceId"], indices = [Index("campaignId")])
 data class Member(
     val campaignId: String,
@@ -271,6 +272,7 @@ data class Member(
     val lastSeq: Long = 0,
 )
 
+@Serializable
 @Entity(tableName = "processed_action", indices = [Index("deviceId", "ts")])
 data class ProcessedAction(
     @PrimaryKey val actionId: String,

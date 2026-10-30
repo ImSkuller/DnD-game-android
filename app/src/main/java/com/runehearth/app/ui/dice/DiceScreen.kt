@@ -208,6 +208,7 @@ private fun RollStage(record: RollRecord?, rolling: Boolean) {
     val glow = tier?.let { tierColor(it) } ?: Theme.gold
     var tumbling by remember(record?.id) { mutableStateOf(true) }
     var display by remember(record?.id) { mutableIntStateOf(Random.nextInt(1, 21)) }
+    val perf = com.runehearth.app.ui.theme.LocalPerf.current
     val spin = remember(record?.id) { Animatable(0f) }
     val pop = remember(record?.id) { Animatable(0.6f) }
     val shake = remember(record?.id) { Animatable(0f) }
@@ -217,8 +218,8 @@ private fun RollStage(record: RollRecord?, rolling: Boolean) {
         val maxFace = if (isCoin) 2 else (record.expr.substringAfter('d', "20").takeWhile { it.isDigit() }.toIntOrNull() ?: 20)
         spin.snapTo(0f)
         kotlinx.coroutines.coroutineScope {
-            launch { spin.animateTo(if (isCoin) 1800f else 720f, tween(950, easing = FastOutSlowInEasing)) }
-            val end = System.currentTimeMillis() + 900
+            launch { spin.animateTo(if (isCoin) 1800f else 720f, tween(perf.diceSpinMs, easing = FastOutSlowInEasing)) }
+            val end = System.currentTimeMillis() + perf.diceSpinMs - 50
             while (System.currentTimeMillis() < end) { display = Random.nextInt(1, maxFace + 1); delay(55) }
         }
         tumbling = false

@@ -47,6 +47,8 @@ class RemoteSession(
     private val deviceId: String,
     private val claimId: String? = null,
     private val newName: String? = null,
+    /** Join as a Dungeon Master controller (full-fidelity mirror, DM permissions) instead of as a player. */
+    private val asDm: Boolean = false,
 ) : GameSession {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val dao get() = db.dao()
@@ -59,7 +61,14 @@ class RemoteSession(
     private var claimWait: CompletableDeferred<Msg.Claim>? = null
 
     override val campaignId: String get() = campaign
-    override val isDm = false
+    override val isDm: Boolean get() = asDm
+    private val _ready = MutableStateFlow(false)
+    /** DM controller: true once the full snapshot has been imported. */
+    val ready: StateFlow<Boolean> = _ready
+    private val snapParts = ArrayList<String>()
+    private val dmBuffer = ArrayList<Msg.DmDelta>()
+    private var snapshotDone = false
+    private var snapshotSeq = 0L
     private val _character = MutableStateFlow<String?>(null)
     val characterIdFlow: StateFlow<String?> = _character
     override val characterId: String? get() = _character.value
@@ -116,7 +125,7 @@ class RemoteSession(
         campaign = ch.campaignId
         val local = dao.campaign(ch.campaignId)
         val nonce = Base64.getEncoder().encodeToString(ByteArray(16).also { rng.nextBytes(it) })
-        c.send(Msg.Auth(deviceId, playerName, nonce, Pairing.proof(code, ch.nonce, nonce, deviceId), local?.lastSeq ?: 0, local?.epoch ?: ch.epoch, claimId, newName))
+        c.send(Msg.Auth(deviceId, playerName, nonce, Pairing.proof(code, ch.nonce, nonce, deviceId), local?.lastSeq ?: 0, local?.epoch ?: ch.epoch, claimId, newName, if (asDm) "dm" else "player"))
         c.authenticate(Pairing.sessionKey(code, ch.nonce, nonce))
 
         coroutineScope {
@@ -137,13 +146,26 @@ class RemoteSession(
                             onBound()
                             pending.values.forEach { c.send(Msg.Act(it.action)) } // resend unacked; host de-duplicates
                             helpers = listOf(
-                                launch { while (isActive) { delay(5000); c.send(Msg.Ping(System.nanoTime())) } },
+                                launch { while (isActive) { delay(5000); c.send(Msg.Ping(System.nanoTime(), _latency.value)) } },
                                 launch { while (isActive) { delay(20_000); sendDigest(c) } },
                             )
                         }
                         is Msg.Delta -> applyDelta(m)
+                        is Msg.DmBound -> {
+                            snapParts.clear(); dmBuffer.clear(); snapshotDone = false; snapshotSeq = m.hostSeq
+                            _error.value = null
+                            _state.value = ConnectionState.CONNECTED
+                            onBound()
+                            pending.values.forEach { c.send(Msg.Act(it.action)) }
+                            helpers = listOf(launch { while (isActive) { delay(5000); c.send(Msg.Ping(System.nanoTime(), _latency.value)) } })
+                        }
+                        is Msg.SnapshotPart -> {
+                            snapParts.add(m.data)
+                            if (snapParts.size == m.total) { importSnapshot(snapParts.joinToString("")); snapParts.clear() }
+                        }
+                        is Msg.DmDelta -> if (snapshotDone) applyDmDelta(m) else dmBuffer.add(m)
                         is Msg.ActResult -> {
-                            if (m.result.actionId == "hello") sendDigest(c)
+                            if (m.result.actionId == "hello") { if (!asDm) sendDigest(c) }
                             else pending.remove(m.result.actionId)?.done?.complete(m.result)
                         }
                         is Msg.Pong -> _latency.value = (System.nanoTime() - m.t) / 1_000_000
@@ -154,6 +176,28 @@ class RemoteSession(
             } finally {
                 helpers.forEach { it.cancel() }
             }
+        }
+    }
+
+    /** DM controller: replace the local mirror with the host's full snapshot, then replay any updates that arrived meanwhile. */
+    private suspend fun importSnapshot(text: String) {
+        val id = backup.import(text, validate = false)
+        campaign = id
+        dao.campaign(id)?.let { dao.upsert(it.copy(isHost = false, lastSeq = snapshotSeq)) }
+        snapshotDone = true
+        dmBuffer.forEach { applyDmDelta(it) }
+        dmBuffer.clear()
+        _ready.value = true
+    }
+
+    private suspend fun applyDmDelta(m: Msg.DmDelta) {
+        val cid = campaign
+        db.withTransaction {
+            for (c in m.changes) {
+                val type = runCatching { EntityType.valueOf(c.type) }.getOrNull() ?: continue
+                EntityStore.apply(dao, type, c.id, c.payload, c.delete)
+            }
+            dao.campaign(cid)?.let { dao.upsert(it.copy(lastSeq = maxOf(it.lastSeq, m.toSeq))) }
         }
     }
 

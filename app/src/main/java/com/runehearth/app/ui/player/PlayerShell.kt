@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -61,6 +62,12 @@ fun PlayerShell(campaignId: String, onExit: () -> Unit) {
             }
             Tag(label, col); Spacer(Modifier.size(10.dp))
         })
+        if (conn == ConnectionState.RECONNECTING || conn == ConnectionState.DISCONNECTED) {
+            com.runehearth.app.ui.components.Panel(Modifier.fillMaxWidth().padding(8.dp), glow = Color(0xFFE48A3C), padding = 8.dp) {
+                RhText("The host is unreachable.", style = Theme.heading)
+                RhText("Everything you committed is saved on this device and on the host. Reconnecting automatically; if the DM moves the game to another phone, use Join Game again — duplicate actions are never applied twice.", style = Theme.small)
+            }
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             val id = charId
             if (id == null || camp == null) Box(Modifier.fillMaxSize(), Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { LoadingRune(size = 64.dp); RhText("Synchronising with the host…", style = Theme.small) } }

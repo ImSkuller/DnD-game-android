@@ -56,9 +56,10 @@ fun JoinScreen(onBack: () -> Unit, onJoined: (GameSession) -> Unit) {
     var selected by remember { mutableStateOf<FoundHost?>(null) }
     var session by remember { mutableStateOf<RemoteSession?>(null) }
     var newChar by remember { mutableStateOf("") }
+    var asDm by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { name = app.prefs.playerName.first(); manual = app.prefs.lastHost.first() }
     // abandon an unfinished attempt when leaving the screen
-    DisposableEffect(Unit) { onDispose { if (session?.characterId == null) session?.close() } }
+    DisposableEffect(Unit) { onDispose { if (session?.characterId == null && session?.ready?.value != true) session?.close() } }
 
     Column(Modifier.fillMaxSize()) {
         ScreenTopBar("Join a Game", { session?.close(); onBack() })
@@ -71,7 +72,13 @@ fun JoinScreen(onBack: () -> Unit, onJoined: (GameSession) -> Unit) {
                         Spacer(Modifier.height(8.dp))
                         RhTextField(name, { name = it.take(40) }, label = "Your name", modifier = Modifier.fillMaxWidth())
                         Spacer(Modifier.height(8.dp))
-                        RhTextField(code, { code = it.filter { c -> c.isDigit() }.take(6) }, label = "6-digit pairing code", keyboard = KeyboardType.Number, modifier = Modifier.fillMaxWidth())
+                        RhTextField(code, { code = it.filter { c -> c.isDigit() }.take(6) }, label = if (asDm) "6-digit DM code" else "6-digit player code", keyboard = KeyboardType.Number, modifier = Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            com.runehearth.app.ui.components.Chip("I am a player", !asDm, { asDm = false })
+                            com.runehearth.app.ui.components.Chip("I am the Dungeon Master", asDm, { asDm = true }, color = Color(0xFF8CCB5A))
+                        }
+                        if (asDm) RhText("Use this when a different phone is hosting the session. You keep full Dungeon Master control.", style = Theme.small)
                     }
                 }
                 item { SectionHeader("Nearby Hosts") }
@@ -94,7 +101,7 @@ fun JoinScreen(onBack: () -> Unit, onJoined: (GameSession) -> Unit) {
                             val host = parts.getOrNull(0).orEmpty(); val port = parts.getOrNull(1)?.toIntOrNull() ?: 0
                             if (host.isNotEmpty() && port in 1..65535 && code.length == 6) scope.launch {
                                 app.prefs.setPlayerName(name); app.prefs.setLastHost(manual)
-                                val rs = RemoteSession(app.db, app.backup, host, port, code, name.ifBlank { "Adventurer" }, app.prefs.deviceId())
+                                val rs = RemoteSession(app.db, app.backup, host, port, code, name.ifBlank { "Adventurer" }, app.prefs.deviceId(), asDm = asDm)
                                 session = rs; rs.start()
                             }
                         }, Modifier.fillMaxWidth(), icon = RhIcon.WIFI, kind = BtnKind.GOLD, enabled = code.length == 6 && manual.contains(':'))
@@ -110,9 +117,11 @@ private fun ConnectingView(s: RemoteSession, newChar: String, onNewChar: (String
     val claimables by s.claimables.collectAsState()
     val error by s.error.collectAsState()
     val charId by s.characterIdFlow.collectAsState()
+    val ready by s.ready.collectAsState()
     val state by s.connection.collectAsState()
     // wait until the first sync produced the campaign mirror, then enter
     LaunchedEffect(charId) { if (charId != null) { kotlinx.coroutines.delay(350); onJoined(s) } }
+    LaunchedEffect(ready) { if (ready && s.isDm) onJoined(s) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         if (error != null) {
             RhText(error ?: "", style = Theme.heading, color = Color(0xFFE5534B))
