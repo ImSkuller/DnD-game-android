@@ -167,7 +167,6 @@ fun HomeScreen(onOpen: (Campaign) -> Unit, onHostOnly: (Campaign) -> Unit, onJoi
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 WoodButton("Import", { importLauncher.launch(arrayOf("*/*")) }, Modifier.weight(1f), icon = RhIcon.SCROLL, kind = BtnKind.SECONDARY, compact = true)
-                WoodButton("Assets", onAssets, Modifier.weight(1f), icon = RhIcon.GEM, kind = BtnKind.SECONDARY, compact = true)
                 WoodButton("Settings", onSettings, Modifier.weight(1f), icon = RhIcon.GEAR, kind = BtnKind.SECONDARY, compact = true)
             }
         }

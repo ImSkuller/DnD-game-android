@@ -75,7 +75,7 @@ import com.runehearth.app.ui.rememberDispatch
 import com.runehearth.app.ui.rememberFlow
 import com.runehearth.app.ui.theme.Theme
 
-private val TABS = listOf("Overview", "Skills", "Gear", "Pack", "Effects", "Journal")
+private val TABS = listOf("Hero", "Items", "Skills", "Journal")
 
 /** The full character sheet. The DM gets every control; a player only the controls the host will accept. */
 @Composable
@@ -97,11 +97,9 @@ fun CharacterSheet(characterId: String, modifier: Modifier = Modifier, onDeleted
         }
         AnimatedContent(tab, Modifier.weight(1f), transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) }, label = "sheetTab") { t ->
             when (t) {
-                0 -> OverviewTab(c, stats, dm, onDeleted)
-                1 -> SkillsTab(c, dm)
-                2 -> GearTab(c, equipped, dm)
-                3 -> PackTab(c, equipped, dm)
-                4 -> EffectsTab(c, statuses, dm)
+                0 -> OverviewTab(c, stats, dm, onDeleted, statuses)
+                1 -> ItemsTab(c, equipped, dm)
+                2 -> SkillsTab(c, dm)
                 else -> JournalTab(c, dm)
             }
         }
@@ -112,13 +110,15 @@ fun CharacterSheet(characterId: String, modifier: Modifier = Modifier, onDeleted
 private fun Section(content: @Composable () -> Unit) = Box(Modifier.padding(horizontal = 12.dp)) { content() }
 
 @Composable
-private fun OverviewTab(c: GameCharacter, stats: com.runehearth.app.engine.FinalStats, dm: Boolean, onDeleted: () -> Unit) {
+private fun OverviewTab(c: GameCharacter, stats: com.runehearth.app.engine.FinalStats, dm: Boolean, onDeleted: () -> Unit, statuses: List<StatusEffect>) {
     val dao = rememberDao()
     val dispatch = rememberDispatch()
     val wallet by rememberFlow(c.id, null) { dao.observeWallet(Wallet.personalId(c.id)) }
     var editing by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var xp by remember { mutableStateOf(0L) }
+    var addingStatus by remember { mutableStateOf(false) }
+    val dispatchFx = rememberDispatch()
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Panel(Modifier.fillMaxWidth()) {
@@ -154,6 +154,12 @@ private fun OverviewTab(c: GameCharacter, stats: com.runehearth.app.engine.Final
                         WoodButton("Award XP", { dispatch(Action.AwardExp(newActionId(), c.id, xp)); xp = 0 }, compact = true, enabled = xp > 0)
                     }
                 }
+            }
+        }
+        if (statuses.isNotEmpty() || dm) item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                SectionHeader("Status effects") { if (dm) RhIconButton(RhIcon.PLUS, { addingStatus = true }, size = 18.dp) }
+                statuses.forEach { s -> StatusRow(s, dm) { dispatchFx(Action.DeleteStatus(newActionId(), s.id)) } }
             }
         }
         item {
@@ -193,6 +199,7 @@ private fun OverviewTab(c: GameCharacter, stats: com.runehearth.app.engine.Final
         }
         if (dm) item { WoodButton("Remove from party", { deleting = true }, Modifier.fillMaxWidth(), kind = BtnKind.DANGER, icon = RhIcon.TRASH, compact = true) }
     }
+    if (addingStatus) StatusEditor(c.id) { addingStatus = false }
     if (editing) CharacterEditor(c.campaignId, c) { editing = false }
     if (deleting) ConfirmDialog("Remove ${c.name}?", "Their items, skills and effects are deleted; any coins move to the party purse.", "Remove", { dispatch(Action.DeleteCharacter(newActionId(), c.id)); onDeleted() }, { deleting = false })
 }
@@ -251,7 +258,7 @@ private fun SkillsTab(c: GameCharacter, dm: Boolean) {
 // ---------------------------------------------------------------- Gear
 
 @Composable
-private fun GearTab(c: GameCharacter, equipped: List<Item>, dm: Boolean) {
+fun GearTab(c: GameCharacter, equipped: List<Item>, dm: Boolean) {
     var detail by remember { mutableStateOf<Item?>(null) }
     val slots = listOf(EquipSlot.HELMET, EquipSlot.CHESTPLATE, EquipSlot.GLOVES, EquipSlot.LEGGINGS, EquipSlot.BOOTS, EquipSlot.MAIN_HAND, EquipSlot.OFF_HAND)
     val accessories = equipped.filter { it.slot == EquipSlot.ACCESSORY }
@@ -288,7 +295,7 @@ private fun GearTab(c: GameCharacter, equipped: List<Item>, dm: Boolean) {
 private enum class SortMode(val label: String) { NAME("Name"), RARITY("Rarity"), KIND("Type"), QTY("Quantity") }
 
 @Composable
-private fun PackTab(c: GameCharacter, equipped: List<Item>, dm: Boolean) {
+fun PackTab(c: GameCharacter, equipped: List<Item>, dm: Boolean) {
     val dao = rememberDao()
     val items by rememberFlow(c.id, emptyList()) { dao.observeItemsOf(c.id) }
     val stash by rememberFlow(c.campaignId, emptyList()) { dao.observeStash(c.campaignId) }
@@ -426,18 +433,6 @@ fun ItemDetailDialog(item: Item, owner: GameCharacter, equipped: List<Item>, dm:
 // ---------------------------------------------------------------- Effects
 
 @Composable
-private fun EffectsTab(c: GameCharacter, statuses: List<StatusEffect>, dm: Boolean) {
-    val dispatch = rememberDispatch()
-    var adding by remember { mutableStateOf(false) }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (dm) item { WoodButton("Add status effect", { adding = true }, Modifier.fillMaxWidth(), icon = RhIcon.PLUS, compact = true, kind = BtnKind.GOLD) }
-        if (statuses.isEmpty()) item { EmptyState(RhIcon.HEART, "No active effects", "Buffs and debuffs will appear here.") }
-        items(statuses, key = { it.id }) { s -> StatusRow(s, dm) { dispatch(Action.DeleteStatus(newActionId(), s.id)) } }
-    }
-    if (adding) StatusEditor(c.id) { adding = false }
-}
-
-@Composable
 fun StatusRow(s: StatusEffect, dm: Boolean, onRemove: () -> Unit) {
     val col = if (s.isBuff) androidx.compose.ui.graphics.Color(0xFF5CB85C) else androidx.compose.ui.graphics.Color(0xFFD9453B)
     Panel(Modifier.fillMaxWidth(), padding = 8.dp, glow = col) {
@@ -508,5 +503,17 @@ fun RollLine(r: com.runehearth.app.data.RollRecord) {
         RhText("${r.expr}${if (r.label.isNotBlank()) " · ${r.label}" else ""}", Modifier.weight(1f), style = Theme.small, maxLines = 1)
         RhText("[${r.dice}]", style = Theme.small, maxLines = 1)
         RhText(r.total.toString(), style = Theme.heading.copy(fontSize = 16.sp))
+    }
+}
+
+/** Equipped gear and backpack in one tab, switched with two chips. */
+@Composable
+private fun ItemsTab(c: GameCharacter, equipped: List<Item>, dm: Boolean) {
+    var pack by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip("Equipped", !pack, { pack = false }); Chip("Backpack", pack, { pack = true })
+        }
+        Box(Modifier.weight(1f)) { if (pack) PackTab(c, equipped, dm) else GearTab(c, equipped, dm) }
     }
 }

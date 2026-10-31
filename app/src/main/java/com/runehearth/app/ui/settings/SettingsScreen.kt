@@ -34,7 +34,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onAssets: () -> Unit = {}) {
     val app = LocalApp.current
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
@@ -46,6 +46,7 @@ fun SettingsScreen(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         ScreenTopBar("Settings", onBack)
         LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item { WoodButton("Browse the asset library", onAssets, Modifier.fillMaxWidth(), icon = com.runehearth.app.ui.components.RhIcon.GEM, kind = BtnKind.SECONDARY, compact = true) }
             item {
                 Panel(Modifier.fillMaxWidth()) {
                     SectionHeader("Theme")

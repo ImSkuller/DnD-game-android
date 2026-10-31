@@ -136,8 +136,9 @@ fun DiceScreen(campaignId: String, modifier: Modifier = Modifier, showHistoryOfA
                 }
             }
             item {
+            com.runehearth.app.ui.components.Collapsible("Custom roll") {
                 Panel(Modifier.fillMaxWidth()) {
-                    SectionHeader("Custom Roll")
+                    
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Stepper(count, { count = it }, min = 1, max = RollSpec.MAX_COUNT, label = "Dice")
                         Stepper(sides, { sides = it }, min = 2, max = RollSpec.MAX_SIDES, step = if (sides >= 20) 10 else 1, label = "Sides")
@@ -160,6 +161,7 @@ fun DiceScreen(campaignId: String, modifier: Modifier = Modifier, showHistoryOfA
                     }
                 }
             }
+        }
             item { SectionHeader("Roll History") }
             val list = if (showHistoryOfAll) rolls else rolls.filter { it.actor == session.characterId }
             if (list.isEmpty()) item { EmptyState(RhIcon.DICE, "No rolls yet", "Cast the dice and fate will be recorded here.") }

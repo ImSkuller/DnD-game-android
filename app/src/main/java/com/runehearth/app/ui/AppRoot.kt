@@ -63,7 +63,7 @@ fun AppRoot() {
                                 onAssets = { vm.push(Route.Assets) },
                             )
                             Route.Join -> JoinScreen(onBack = { vm.pop() }, onJoined = { s -> vm.adoptSession(s, if (s.isDm) Route.Dm(s.campaignId) else Route.Player(s.campaignId)) })
-                            Route.Settings -> SettingsScreen(onBack = { vm.pop() })
+                            Route.Settings -> SettingsScreen(onBack = { vm.pop() }, onAssets = { vm.push(Route.Assets) })
                             Route.Assets -> AssetLibraryScreen(onBack = { vm.pop() })
                             is Route.Dm -> vm.session?.let { s -> CompositionLocalProvider(LocalSession provides s) { DmShell(route.campaignId, onExit = { vm.pop() }) } }
                             is Route.HostConsole -> (vm.session as? com.runehearth.app.net.HostSession)?.let { h -> CompositionLocalProvider(LocalSession provides h) { com.runehearth.app.ui.dm.HostConsole(h, onExit = { vm.pop() }) } }

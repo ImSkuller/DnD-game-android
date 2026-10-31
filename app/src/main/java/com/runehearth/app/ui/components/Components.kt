@@ -498,3 +498,18 @@ fun KeyValue(label: String, value: String, modifier: Modifier = Modifier) {
 }
 
 fun contentPadding(h: Dp = 14.dp, v: Dp = 10.dp) = PaddingValues(horizontal = h, vertical = v)
+
+/** Section hidden behind a header until tapped: keeps advanced options out of the way. */
+@Composable
+fun Collapsible(title: String, modifier: Modifier = Modifier, startOpen: Boolean = false, content: @Composable ColumnScope.() -> Unit) {
+    var open by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(startOpen) }
+    val rot by animateFloatAsState(if (open) 90f else 0f, tween(180), label = "chev")
+    Column(modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().pressable { open = !open }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            RhText(title.uppercase(), Modifier.weight(1f), style = Theme.label.copy(fontSize = 13.sp), color = Theme.gold)
+            Box(Modifier.rotate(rot)) { RhIconView(RhIcon.ARROW, Theme.gold, 18.dp) }
+        }
+        OrnateDivider()
+        androidx.compose.animation.AnimatedVisibility(open) { Column(Modifier.fillMaxWidth().padding(top = 6.dp), content = content) }
+    }
+}

@@ -68,10 +68,7 @@ import com.runehearth.app.ui.sheet.CharacterEditor
 import com.runehearth.app.ui.sheet.CharacterSheet
 import com.runehearth.app.ui.theme.Theme
 
-private val DM_TABS = listOf(
-    TabSpec("Hall", RhIcon.CASTLE), TabSpec("Party", RhIcon.SHIELD), TabSpec("Purse", RhIcon.COIN),
-    TabSpec("Dice", RhIcon.DICE), TabSpec("Combat", RhIcon.SWORDS), TabSpec("Lore", RhIcon.SCROLL),
-)
+private val DM_TABS = listOf(TabSpec("Party", RhIcon.SHIELD), TabSpec("Purse", RhIcon.COIN), TabSpec("Dice", RhIcon.DICE), TabSpec("Battle", RhIcon.SWORDS))
 
 /** Dungeon Master interface: dashboard, party, economy, dice, combat and campaign tools. */
 @Composable
@@ -82,12 +79,13 @@ fun DmShell(campaignId: String, onExit: () -> Unit) {
     val conn by session.connection.collectAsState()
     var tab by rememberSaveable { mutableStateOf(0) }
     var charId by rememberSaveable { mutableStateOf<String?>(null) }
-    BackHandler(enabled = charId != null) { charId = null }
+    var story by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = charId != null || story) { if (charId != null) charId = null else story = false }
 
     Column(Modifier.fillMaxSize()) {
         ScreenTopBar(
             title = camp?.name ?: "Campaign",
-            onBack = if (charId != null) ({ charId = null }) else onExit,
+            onBack = if (charId != null) ({ charId = null }) else if (story) ({ story = false }) else onExit,
             actions = {
                 val label = when (conn) { ConnectionState.HOSTING -> "Hosting"; else -> if (camp?.mode == CampaignMode.COOP) "Co-op" else "Local" }
                 Tag(label, if (conn == ConnectionState.HOSTING) Color(0xFF5CB85C) else Theme.steel)
@@ -95,33 +93,19 @@ fun DmShell(campaignId: String, onExit: () -> Unit) {
             },
         )
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            AnimatedContent(charId to tab, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) }, label = "dmTab") { (cid, t) ->
+            AnimatedContent(Triple(charId, story, tab), transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) }, label = "dmTab") { (cid, st, t) ->
                 when {
                     cid != null -> CharacterSheet(cid, onDeleted = { charId = null })
-                    t == 0 -> Dashboard(campaignId, onOpenCharacter = { tab = 1; charId = it }, onTab = { tab = it })
-                    t == 1 -> PartyScreen(campaignId, onOpen = { charId = it })
-                    t == 2 -> EconomyScreen(campaignId)
-                    t == 3 -> DiceScreen(campaignId)
-                    t == 4 -> CombatScreen(campaignId)
-                    else -> CampaignScreen(campaignId)
+                    st -> CampaignScreen(campaignId)
+                    t == 0 -> PartyHome(campaignId, onOpenCharacter = { charId = it }, onStory = { story = true })
+                    t == 1 -> EconomyScreen(campaignId)
+                    t == 2 -> DiceScreen(campaignId)
+                    else -> CombatScreen(campaignId)
                 }
             }
         }
-        if (charId == null) RuneTabBar(DM_TABS, tab, { tab = it })
+        if (charId == null) RuneTabBar(DM_TABS, tab, { tab = it; story = false })
     }
-}
-
-@Composable
-fun PartyScreen(campaignId: String, onOpen: (String) -> Unit, modifier: Modifier = Modifier) {
-    val dao = rememberDao()
-    val chars by rememberFlow(campaignId, emptyList()) { dao.observeCharacters(campaignId) }
-    var creating by remember { mutableStateOf(false) }
-    LazyColumn(modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { WoodButton("Add character", { creating = true }, Modifier.fillMaxWidth(), icon = RhIcon.PLUS, kind = BtnKind.GOLD, compact = true) }
-        if (chars.isEmpty()) item { EmptyState(RhIcon.SHIELD, "No characters yet", "Create adventurers (or let players join a co-op session and create their own).") }
-        items(chars, key = { it.id }) { c -> CharacterCard(c) { onOpen(c.id) } }
-    }
-    if (creating) CharacterEditor(campaignId, null) { creating = false }
 }
 
 @Composable
@@ -147,46 +131,38 @@ fun CharacterCard(c: GameCharacter, onClick: () -> Unit) {
 }
 
 @Composable
-private fun Dashboard(campaignId: String, onOpenCharacter: (String) -> Unit, onTab: (Int) -> Unit) {
+private fun PartyHome(campaignId: String, onOpenCharacter: (String) -> Unit, onStory: () -> Unit) {
     val dao = rememberDao()
     val session = LocalSession.current
-    val app = LocalApp.current
-    val toaster = LocalToaster.current
-    val dispatch = rememberDispatch()
     val camp by rememberFlow(campaignId, null) { dao.observeCampaign(campaignId) }
     val chars by rememberFlow(campaignId, emptyList()) { dao.observeCharacters(campaignId) }
     val events by rememberFlow(campaignId, emptyList()) { dao.observeEvents(campaignId, 12) }
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
     val host = session as? HostSession
     var tools by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (host != null) item { SessionPanel(host) }
         else if (session is com.runehearth.app.net.RemoteSession) item { ControllerPanel(session) }
-        else item {
-            Panel(Modifier.fillMaxWidth()) {
-                RhText("Local Only campaign", style = Theme.heading)
-                RhText("You manage everyone on this device. Balances are visible only to you.", style = Theme.small)
-            }
-        }
         item {
-            Panel(Modifier.fillMaxWidth(), surface = Surface.STONE) {
-                SectionHeader("Quick Actions")
-                androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    item { WoodButton("Roll d20", { onTab(3) }, icon = RhIcon.DICE, compact = true) }
-                    item { WoodButton("Reward gold", { onTab(2) }, icon = RhIcon.COIN, compact = true, kind = BtnKind.SECONDARY) }
-                    item { WoodButton("Start battle", { onTab(4) }, icon = RhIcon.SWORDS, compact = true, kind = BtnKind.SECONDARY) }
-                    item { WoodButton("Tools", { tools = true }, icon = RhIcon.GEM, compact = true, kind = BtnKind.SECONDARY) }
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                WoodButton("Add hero", { creating = true }, Modifier.weight(1f), icon = RhIcon.PLUS, kind = BtnKind.GOLD, compact = true)
+                WoodButton("Story", onStory, Modifier.weight(1f), icon = RhIcon.SCROLL, kind = BtnKind.SECONDARY, compact = true)
+                WoodButton("Tools", { tools = true }, Modifier.weight(1f), icon = RhIcon.GEM, kind = BtnKind.SECONDARY, compact = true)
             }
         }
-        item { SectionHeader("The Party") }
-        if (chars.none { !it.isNpc }) item { EmptyState(RhIcon.SHIELD, "No adventurers yet", "Open the Party tab to create characters.") }
+        if (chars.isEmpty()) item { EmptyState(RhIcon.SHIELD, "No heroes yet", "Tap Add hero to create your first adventurer.") }
         items(chars.filter { !it.isNpc }, key = { it.id }) { c -> CharacterCard(c) { onOpenCharacter(c.id) } }
-        item { SectionHeader("Recent Events") }
-        if (events.isEmpty()) item { RhText("The chronicle is empty.", style = Theme.small, color = Theme.onDarkSoft) }
-        items(events, key = { it.seq }) { e -> RhText("• ${e.text}", style = Theme.small, color = Theme.onDark) }
+        if (chars.any { it.isNpc }) item {
+            com.runehearth.app.ui.components.Collapsible("NPCs") {
+                chars.filter { it.isNpc }.forEach { c -> CharacterCard(c) { onOpenCharacter(c.id) }; Spacer(Modifier.height(8.dp)) }
+            }
+        }
+        if (events.isNotEmpty()) item {
+            com.runehearth.app.ui.components.Collapsible("Recent events") { events.forEach { e -> RhText("• ${e.text}", style = Theme.small, color = Theme.onDark) } }
+        }
     }
     if (tools) camp?.let { DmTools(it, { tools = false }) }
+    if (creating) CharacterEditor(campaignId, null) { creating = false }
 }
 
 @Composable
@@ -210,16 +186,23 @@ private fun SessionPanel(host: HostSession) {
         }
         Spacer(Modifier.height(8.dp))
         if (hosting) {
-            CodesRow(code, dmCode, address)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                WoodButton("New code", { host.regenerateCode() }, compact = true, kind = BtnKind.SECONDARY)
-                WoodButton("Health", { showHealth = !showHealth }, compact = true, kind = BtnKind.SECONDARY)
-                WoodButton("Close session", { host.stopHosting() }, compact = true, kind = BtnKind.DANGER)
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                RhText("PLAYERS ENTER THIS CODE", style = Theme.label.copy(fontSize = 10.sp))
+                RhText(code, style = Theme.title.copy(fontSize = 38.sp, letterSpacing = 6.sp), color = Theme.gold)
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             ConnectedList(players, host)
-            if (showHealth) { Spacer(Modifier.height(8.dp)); HostMetricsView(metrics) }
+            Spacer(Modifier.height(4.dp))
+            com.runehearth.app.ui.components.Collapsible("Advanced") {
+                CodesRow(code, dmCode, address)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    WoodButton("New code", { host.regenerateCode() }, compact = true, kind = BtnKind.SECONDARY)
+                    WoodButton("Health", { showHealth = !showHealth }, compact = true, kind = BtnKind.SECONDARY)
+                }
+                if (showHealth) { Spacer(Modifier.height(8.dp)); HostMetricsView(metrics) }
+            }
+            WoodButton("Close session", { host.stopHosting() }, Modifier.fillMaxWidth(), compact = true, kind = BtnKind.DANGER)
         } else {
             WoodButton("Open session", { if (!host.startHosting()) toaster.show("Could not open the network port", true) }, Modifier.fillMaxWidth(), icon = RhIcon.WIFI, kind = BtnKind.GOLD, compact = true)
         }

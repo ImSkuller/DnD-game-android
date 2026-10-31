@@ -151,8 +151,9 @@ fun EconomyScreen(campaignId: String, modifier: Modifier = Modifier) {
             }
         }
         item {
+            com.runehearth.app.ui.components.Collapsible("Transfer between purses") {
             Panel(Modifier.fillMaxWidth()) {
-                SectionHeader("Transfer")
+                
                 RhText("FROM", style = Theme.label.copy(fontSize = 10.sp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     item { Chip("Party", from == Wallet.partyId(campaignId), { from = Wallet.partyId(campaignId) }) }
@@ -170,9 +171,11 @@ fun EconomyScreen(campaignId: String, modifier: Modifier = Modifier) {
                 WoodButton("Transfer ${Money.format(xferAmount)}", { dispatch(Action.TransferFunds(newActionId(), from, to, xferAmount, "Transfer")); xferKey++; xferAmount = 0 }, Modifier.fillMaxWidth(), icon = RhIcon.ARROW, compact = true, enabled = xferAmount > 0 && to.isNotEmpty() && from != to)
             }
         }
+        }
         item {
+            com.runehearth.app.ui.components.Collapsible("Currency converter") {
             Panel(Modifier.fillMaxWidth(), surface = Surface.STONE) {
-                SectionHeader("Currency Converter")
+                
                 RhText("10 Bronze = 1 Silver · 10 Silver = 1 Gold · 20 Gold = 1 Holy Gold", style = Theme.small)
                 Spacer(Modifier.height(4.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { items(Coin.entries) { c -> Chip(c.label, convCoin == c.name, { convCoin = c.name }) } }
@@ -184,6 +187,7 @@ fun EconomyScreen(campaignId: String, modifier: Modifier = Modifier) {
                     Row(verticalAlignment = Alignment.CenterVertically) { CoinImage(to, 22.dp); Spacer(Modifier.width(8.dp)); RhText("$n ${to.label}" + if (rem > 0) " (+$rem bronze left over)" else "") }
                 }
             }
+        }
         }
         item { SectionHeader("Transaction History") }
         if (tx.isEmpty()) item { RhText("No transactions yet.", style = Theme.small, color = Theme.onDarkSoft) }
