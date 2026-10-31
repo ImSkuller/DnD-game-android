@@ -12,12 +12,12 @@ import com.runehearth.app.session.newEntityId
 data class ItemTemplate(
     val name: String, val kind: ItemKind, val slot: EquipSlot?, val rarity: Rarity, val art: AssetRef, val description: String,
     val atk: Int = 0, val def: Int = 0, val spd: Int = 0, val hp: Int = 0, val mp: Int = 0,
-    val healHp: Int = 0, val healMp: Int = 0, val weight: Int = 1, val value: Long = 0,
+    val healHp: Int = 0, val healMp: Int = 0, val weight: Int = 1, val value: Long = 0, val luck: Int = 0,
 ) {
     fun toItem(campaignId: String, ownerId: String?, quantity: Int = 1) = Item(
         id = newEntityId(), campaignId = campaignId, ownerId = ownerId, name = name, kind = kind, slot = slot, rarity = rarity,
         description = description, quantity = quantity, weight = weight, art = art.encode(), bonusHp = hp, bonusMp = mp, bonusAtk = atk,
-        bonusDef = def, bonusSpd = spd, healHp = healHp, healMp = healMp, value = value,
+        bonusDef = def, bonusSpd = spd, bonusLuck = luck, healHp = healHp, healMp = healMp, value = value,
     )
 }
 
@@ -49,6 +49,7 @@ object ItemTemplates {
         ItemTemplate("Band of Vitality", ItemKind.ACCESSORY, EquipSlot.ACCESSORY, Rarity.UNCOMMON, a(ArtCategory.ACCESSORY, 1, 0), "Warm to the touch.", hp = 12, weight = 0, value = 300),
         ItemTemplate("Amulet of the Sage", ItemKind.ACCESSORY, EquipSlot.ACCESSORY, Rarity.RARE, a(ArtCategory.ACCESSORY, 2, 10, true), "Whispers forgotten lore.", mp = 15, weight = 0, value = 900),
         ItemTemplate("Ironbark Charm", ItemKind.ACCESSORY, EquipSlot.ACCESSORY, Rarity.COMMON, a(ArtCategory.ACCESSORY, 13, 17), "A skull charm for luck.", def = 1, weight = 0, value = 45),
+        ItemTemplate("Four-leaf Charm", ItemKind.ACCESSORY, EquipSlot.ACCESSORY, Rarity.UNCOMMON, a(ArtCategory.ACCESSORY, 11, 5), "Pressed in a locket.", luck = 4, weight = 0, value = 200),
         ItemTemplate("Minor Healing Potion", ItemKind.POTION, null, Rarity.COMMON, a(ArtCategory.POTION, 0, 0), "Restores a little health.", healHp = 15, weight = 0, value = 25),
         ItemTemplate("Greater Healing Potion", ItemKind.POTION, null, Rarity.UNCOMMON, a(ArtCategory.POTION, 7, 0, true), "Restores a great deal of health.", healHp = 45, weight = 0, value = 120),
         ItemTemplate("Mana Draught", ItemKind.POTION, null, Rarity.COMMON, a(ArtCategory.POTION, 5, 10), "Restores magical energy.", healMp = 20, weight = 0, value = 40),

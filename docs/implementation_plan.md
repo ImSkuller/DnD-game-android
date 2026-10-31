@@ -240,3 +240,18 @@ not honoured by the emulator: guest reported 3 GB). **No physical devices were a
 - Item art is stylised vector art generated in code (20 colours × glow), not hand-painted illustration.
 - Player-side unacknowledged actions are kept in memory only (lost if the player app is killed mid-action).
 - Mirror databases of DM controllers contain the whole campaign (by design) and are not encrypted at rest.
+
+## 18. v0.1.1 — simpler stats, player self-management, notifications
+- **Six stats only:** Health, Mana, Attack, Defense, Speed, **Luck** (final = base + equipment + status effects). The six attribute
+  columns (STR…CHA) were removed. Database **v1 → v2** uses a Room *auto-migration* (Luck columns added with defaults, attribute columns
+  dropped; existing data kept, Luck = 5) and is covered by `MigrationTest`. Old backup files still import (unknown keys are ignored).
+- **Players manage their own sheet and pack:** edit own stats/profile (`UpsertCharacter`, optimistic `expectedRev`), add/edit/delete own
+  items, skills and status effects, adjust own Health/Mana. The host still validates ownership (nobody can touch another character; DM-only
+  fields — NPC flag, XP, notes ownership — are preserved; NPCs, XP awards, other characters' items and the party stash stay DM-only).
+- **DM notifications:** every such player edit writes an event of type `notify` ("Aelwyn changed Attack 5 → 9, Luck 5 → 8",
+  "Aelwyn added Clover", "removed Potion", "gained status Blessed"). Events are DM-only (`EntityType.EVENT`, never sent to players,
+  delivered to DM-controller devices via `DmDelta`). The DM sees a bell with an unread badge, a toast while online, and a list dialog.
+  Equip/use/transfer/dice are not notified (too noisy). Unread state is per device (`SharedPreferences`).
+- Status effects are available to players on themselves and carry Luck as well.
+- Trade-off (explicit product decision): players can now edit their own numbers, so anti-cheat is by *visibility* (DM sees every change)
+  rather than prevention. Money, dice and everything outside the player's own sheet remain host-validated.

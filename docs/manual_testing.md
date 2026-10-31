@@ -43,3 +43,13 @@
 ## 5. Things to look at
 - Asset Library (Home → Assets): 16 categories, search, 20 colours, glow.
 - Rotate the phone, kill/reopen the app: data persists, sessions resume.
+
+## 6. v0.1.1 checks — player self-management and notifications
+1. Phone A (DM) hosts; phone B joins as a player (section 2).
+2. On B: **Hero** → pencil icon → change Attack/Luck/Health → Save. On A a toast appears ("Aelwyn changed Attack 5 → 9 …") and the bell shows a red badge;
+   tap the bell to read it and clear the badge.
+3. On B: **Items → Backpack → Add item**, use a template or create one; edit its quantity; delete it. A gets a notification each time.
+4. On B: **Hero → Status effects → +** to add *Lucky* (+5 Luck); the Luck stat updates; remove it.
+5. Confirm B still cannot award itself XP, see the DM's NPCs, or edit anyone else's items.
+6. Stats everywhere are only Health, Mana, Attack, Defense, Speed, Luck.
+7. Upgrading from 1.0.0/earlier installs: install over the old app (do not uninstall) — existing campaigns keep their data and gain Luck = 5.

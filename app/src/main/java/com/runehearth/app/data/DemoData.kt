@@ -20,14 +20,14 @@ object DemoData {
 
         class Hero(val name: String, val cls: String, val race: String, val job: String, val art: AssetRef, val stats: List<Int>, val gold: Long)
         val heroes = listOf(
-            Hero("Aelwyn Stormcaller", "Wizard", "Elf", "Court Mage", AssetRef(ArtCategory.HELMET, 14, 12, true), listOf(26, 40, 3, 2, 6), 120),
-            Hero("Borin Ironhand", "Fighter", "Dwarf", "Blacksmith", AssetRef(ArtCategory.HELMET, 7, 15, false), listOf(48, 6, 8, 7, 3), 85),
-            Hero("Kira Nightwhisper", "Rogue", "Halfling", "Pickpocket", AssetRef(ArtCategory.HELMET, 9, 16, false), listOf(32, 12, 6, 3, 9), 240),
+            Hero("Aelwyn Stormcaller", "Wizard", "Elf", "Court Mage", AssetRef(ArtCategory.HELMET, 14, 12, true), listOf(26, 40, 3, 2, 6, 7), 120),
+            Hero("Borin Ironhand", "Fighter", "Dwarf", "Blacksmith", AssetRef(ArtCategory.HELMET, 7, 15, false), listOf(48, 6, 8, 7, 3, 3), 85),
+            Hero("Kira Nightwhisper", "Rogue", "Halfling", "Pickpocket", AssetRef(ArtCategory.HELMET, 9, 16, false), listOf(32, 12, 6, 3, 9, 10), 240),
         )
         val ids = heroes.map { h ->
             val id = newEntityId()
             run(Action.UpsertCharacter(newActionId(), GameCharacter(id, cid, h.name, h.art.encode(), className = h.cls, race = h.race, job = h.job,
-                baseHp = h.stats[0], baseMp = h.stats[1], baseAtk = h.stats[2], baseDef = h.stats[3], baseSpd = h.stats[4], curHp = h.stats[0], curMp = h.stats[1],
+                baseHp = h.stats[0], baseMp = h.stats[1], baseAtk = h.stats[2], baseDef = h.stats[3], baseSpd = h.stats[4], baseLuck = h.stats[5], curHp = h.stats[0], curMp = h.stats[1],
                 background = "Drawn to the crypt beneath Hollowmere by rumours of a lost relic.", description = "A seasoned adventurer with a sharp wit.")))
             run(Action.AdjustWallet(newActionId(), Wallet.personalId(id), h.gold * 100 + 37, "Starting funds"))
             id

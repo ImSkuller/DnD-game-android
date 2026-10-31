@@ -81,7 +81,7 @@ private val TABS = listOf("Hero", "Items", "Skills", "Journal")
 @Composable
 fun CharacterSheet(characterId: String, modifier: Modifier = Modifier, onDeleted: () -> Unit = {}) {
     val session = LocalSession.current
-    val dm = session.isDm
+    val dm = session.isDm || session.characterId == characterId   // may edit this sheet
     val dao = rememberDao()
     val ch by rememberFlow(characterId, null) { dao.observeCharacter(characterId) }
     val equipped by rememberFlow(characterId, emptyList()) { dao.observeEquippedOf(characterId) }
@@ -111,6 +111,7 @@ private fun Section(content: @Composable () -> Unit) = Box(Modifier.padding(hori
 
 @Composable
 private fun OverviewTab(c: GameCharacter, stats: com.runehearth.app.engine.FinalStats, dm: Boolean, onDeleted: () -> Unit, statuses: List<StatusEffect>) {
+    val isDm = LocalSession.current.isDm
     val dao = rememberDao()
     val dispatch = rememberDispatch()
     val wallet by rememberFlow(c.id, null) { dao.observeWallet(Wallet.personalId(c.id)) }
@@ -146,12 +147,14 @@ private fun OverviewTab(c: GameCharacter, stats: com.runehearth.app.engine.Final
                     Spacer(Modifier.height(8.dp))
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(listOf(-10 to 0, -5 to 0, -1 to 0, 1 to 0, 5 to 0, 10 to 0)) { (h, _) -> Chip("${if (h > 0) "+" else ""}$h HP", false, { dispatch(Action.AdjustVitals(newActionId(), c.id, h, 0)) }, color = if (h < 0) androidx.compose.ui.graphics.Color(0xFFD9453B) else androidx.compose.ui.graphics.Color(0xFF5CB85C)) }
-                        items(listOf(-5, 5, 10)) { m -> Chip("${if (m > 0) "+" else ""}$m MP", false, { dispatch(Action.AdjustVitals(newActionId(), c.id, 0, m)) }, color = androidx.compose.ui.graphics.Color(0xFF4F8DE0)) }
+                        items(listOf(-5, 5, 10)) { m -> Chip("${if (m > 0) "+" else ""}$m Mana", false, { dispatch(Action.AdjustVitals(newActionId(), c.id, 0, m)) }, color = androidx.compose.ui.graphics.Color(0xFF4F8DE0)) }
                     }
-                    Spacer(Modifier.height(6.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
-                        RhNumberField(xp, { xp = it }, Modifier.weight(1f), "Award experience", max = 1_000_000)
-                        WoodButton("Award XP", { dispatch(Action.AwardExp(newActionId(), c.id, xp)); xp = 0 }, compact = true, enabled = xp > 0)
+                    if (isDm) {
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom) {
+                            RhNumberField(xp, { xp = it }, Modifier.weight(1f), "Award experience", max = 1_000_000)
+                            WoodButton("Award XP", { dispatch(Action.AwardExp(newActionId(), c.id, xp)); xp = 0 }, compact = true, enabled = xp > 0)
+                        }
                     }
                 }
             }
@@ -164,21 +167,11 @@ private fun OverviewTab(c: GameCharacter, stats: com.runehearth.app.engine.Final
         }
         item {
             Panel(Modifier.fillMaxWidth()) {
-                SectionHeader("Combat Stats")
-                StatRow("Attack", stats.atk); StatRow("Defense", stats.def); StatRow("Speed", stats.spd)
-                StatRow("Max HP", stats.hp); StatRow("Max MP", stats.mp)
+                SectionHeader("Stats")
+                StatRow("Health", stats.hp); StatRow("Mana", stats.mp); StatRow("Attack", stats.atk)
+                StatRow("Defense", stats.def); StatRow("Speed", stats.spd); StatRow("Luck", stats.luck)
                 Spacer(Modifier.height(6.dp))
                 RhText("Final = base + equipment + active effects", style = Theme.small)
-            }
-        }
-        item {
-            Panel(Modifier.fillMaxWidth()) {
-                SectionHeader("Attributes")
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    for ((n, v) in listOf("STR" to c.str, "DEX" to c.dex, "CON" to c.con, "INT" to c.intel, "WIS" to c.wis, "CHA" to c.cha)) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) { RhText(n, style = Theme.label.copy(fontSize = 10.sp)); RhText(v.toString(), style = Theme.heading) }
-                    }
-                }
             }
         }
         wallet?.let { w ->
@@ -197,7 +190,7 @@ private fun OverviewTab(c: GameCharacter, stats: com.runehearth.app.engine.Final
                 if (c.description.isNotBlank()) { Spacer(Modifier.height(6.dp)); RhText("DESCRIPTION", style = Theme.label.copy(fontSize = 10.5.sp), color = Theme.goldDark); RhText(c.description) }
             }
         }
-        if (dm) item { WoodButton("Remove from party", { deleting = true }, Modifier.fillMaxWidth(), kind = BtnKind.DANGER, icon = RhIcon.TRASH, compact = true) }
+        if (isDm) item { WoodButton("Remove from party", { deleting = true }, Modifier.fillMaxWidth(), kind = BtnKind.DANGER, icon = RhIcon.TRASH, compact = true) }
     }
     if (addingStatus) StatusEditor(c.id) { addingStatus = false }
     if (editing) CharacterEditor(c.campaignId, c) { editing = false }
@@ -228,7 +221,7 @@ private fun SkillsTab(c: GameCharacter, dm: Boolean) {
     var creating by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (dm) item { WoodButton("Add skill or spell", { creating = true }, Modifier.fillMaxWidth(), icon = RhIcon.PLUS, compact = true, kind = BtnKind.GOLD) }
-        if (skills.isEmpty()) item { EmptyState(RhIcon.WAND, "No skills yet", if (dm) "Teach this character a skill or spell." else "Your Dungeon Master has not granted you any skills.") }
+        if (skills.isEmpty()) item { EmptyState(RhIcon.WAND, "No skills yet", "Add a skill or spell to track it here.") }
         items(skills, key = { it.id }) { s ->
             Panel(Modifier.fillMaxWidth(), glow = Theme.rarity(s.rarity)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
@@ -238,7 +231,7 @@ private fun SkillsTab(c: GameCharacter, dm: Boolean) {
                             RhText(s.name, Modifier.weight(1f, fill = false), style = Theme.heading.copy(fontSize = 17.sp), maxLines = 1)
                             Tag(s.rarity.label, Theme.rarity(s.rarity))
                         }
-                        RhText("Lv ${s.level} · ${s.kind.label}" + (if (s.power > 0) " · Power ${s.power}" else "") + (if (s.manaCost > 0) " · ${s.manaCost} MP" else "") + (if (s.cooldown > 0) " · CD ${s.cooldown}" else ""), style = Theme.small)
+                        RhText("Lv ${s.level} · ${s.kind.label}" + (if (s.power > 0) " · Power ${s.power}" else "") + (if (s.manaCost > 0) " · ${s.manaCost} Mana" else "") + (if (s.cooldown > 0) " · CD ${s.cooldown}" else ""), style = Theme.small)
                         if (s.effect.isNotBlank()) RhText(s.effect, style = Theme.small, color = Theme.gold)
                         if (s.description.isNotBlank()) RhText(s.description, style = Theme.small)
                     }
@@ -280,10 +273,10 @@ fun GearTab(c: GameCharacter, equipped: List<Item>, dm: Boolean) {
             }
         }
         item {
-            val t = equipped.fold(IntArray(5)) { a, i -> a[0] += i.bonusAtk; a[1] += i.bonusDef; a[2] += i.bonusSpd; a[3] += i.bonusHp; a[4] += i.bonusMp; a }
+            val t = equipped.fold(IntArray(6)) { a, i -> a[0] += i.bonusAtk; a[1] += i.bonusDef; a[2] += i.bonusSpd; a[3] += i.bonusHp; a[4] += i.bonusMp; a[5] += i.bonusLuck; a }
             Panel(Modifier.fillMaxWidth(), surface = Surface.STONE) {
                 SectionHeader("Equipment Bonuses")
-                KeyValue("Attack", sign(t[0])); KeyValue("Defense", sign(t[1])); KeyValue("Speed", sign(t[2])); KeyValue("Max HP", sign(t[3])); KeyValue("Max MP", sign(t[4]))
+                KeyValue("Attack", sign(t[0])); KeyValue("Defense", sign(t[1])); KeyValue("Speed", sign(t[2])); KeyValue("Luck", sign(t[5])); KeyValue("Max Health", sign(t[3])); KeyValue("Max Mana", sign(t[4]))
             }
         }
     }
@@ -366,6 +359,7 @@ fun ItemRow(i: Item, onClick: () -> Unit) {
 
 @Composable
 fun ItemDetailDialog(item: Item, owner: GameCharacter, equipped: List<Item>, dm: Boolean, onDismiss: () -> Unit) {
+    val isDm = LocalSession.current.isDm
     val dao = rememberDao()
     val dispatch = rememberDispatch()
     val chars by rememberFlow(owner.campaignId, emptyList()) { dao.observeCharacters(owner.campaignId) }
@@ -389,7 +383,7 @@ fun ItemDetailDialog(item: Item, owner: GameCharacter, equipped: List<Item>, dm:
             if (item.description.isNotBlank()) RhText(item.description)
             val rows = listOf(
                 Triple("Attack", item.bonusAtk, current?.bonusAtk ?: 0), Triple("Defense", item.bonusDef, current?.bonusDef ?: 0), Triple("Speed", item.bonusSpd, current?.bonusSpd ?: 0),
-                Triple("Max HP", item.bonusHp, current?.bonusHp ?: 0), Triple("Max MP", item.bonusMp, current?.bonusMp ?: 0),
+                Triple("Luck", item.bonusLuck, current?.bonusLuck ?: 0), Triple("Max Health", item.bonusHp, current?.bonusHp ?: 0), Triple("Max Mana", item.bonusMp, current?.bonusMp ?: 0),
             ).filter { it.second != 0 || (current != null && it.third != 0) }
             if (rows.isNotEmpty()) {
                 RhText(if (current != null && !item.equipped) "COMPARED TO ${current.name.uppercase()}" else "BONUSES", style = Theme.label.copy(fontSize = 10.5.sp), color = Theme.goldDark)
@@ -401,19 +395,19 @@ fun ItemDetailDialog(item: Item, owner: GameCharacter, equipped: List<Item>, dm:
                     }
                 }
             }
-            if (item.healHp > 0 || item.healMp > 0) RhText("Restores ${if (item.healHp > 0) "${item.healHp} HP " else ""}${if (item.healMp > 0) "${item.healMp} MP" else ""}", color = androidx.compose.ui.graphics.Color(0xFF2E7D32))
+            if (item.healHp > 0 || item.healMp > 0) RhText("Restores ${if (item.healHp > 0) "${item.healHp} HP " else ""}${if (item.healMp > 0) "${item.healMp} Mana" else ""}", color = androidx.compose.ui.graphics.Color(0xFF2E7D32))
             Spacer(Modifier.height(4.dp))
             if (item.quantity > 1 && !item.equipped) Stepper(qty, { qty = it }, min = 1, max = item.quantity, label = "Amount to move")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (inStash && !dm) WoodButton("Take", { dispatch(Action.TransferItem(newActionId(), item.id, owner.id, qty)); onDismiss() }, compact = true, icon = RhIcon.BAG)
+                if (inStash && !isDm) WoodButton("Take", { dispatch(Action.TransferItem(newActionId(), item.id, owner.id, qty)); onDismiss() }, compact = true, icon = RhIcon.BAG)
                 if (!inStash && item.slot != null) {
                     if (item.equipped) WoodButton("Unequip", { dispatch(Action.Unequip(newActionId(), item.id)); onDismiss() }, compact = true, kind = BtnKind.SECONDARY)
                     else WoodButton("Equip", { dispatch(Action.Equip(newActionId(), item.id)); onDismiss() }, compact = true, kind = BtnKind.GOLD)
                 }
                 if (!inStash && (item.healHp > 0 || item.healMp > 0) && !item.equipped) WoodButton("Use", { dispatch(Action.UseItem(newActionId(), item.id)); onDismiss() }, compact = true, icon = RhIcon.POTION)
             }
-            if (!item.equipped && (dm || !inStash)) WoodButton("Move…", { moving = true }, compact = true, kind = BtnKind.SECONDARY, icon = RhIcon.ARROW)
-            if (dm) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!item.equipped && (isDm || !inStash)) WoodButton("Move…", { moving = true }, compact = true, kind = BtnKind.SECONDARY, icon = RhIcon.ARROW)
+            if (isDm || !inStash) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 WoodButton("Edit", { editing = true }, compact = true, kind = BtnKind.SECONDARY, icon = RhIcon.EDIT)
                 WoodButton("Delete", { dispatch(Action.DeleteItem(newActionId(), item.id)); onDismiss() }, compact = true, kind = BtnKind.DANGER, icon = RhIcon.TRASH)
             }
@@ -422,7 +416,7 @@ fun ItemDetailDialog(item: Item, owner: GameCharacter, equipped: List<Item>, dm:
     if (moving) RhDialog({ moving = false }, "Move ${item.name}") {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (!inStash) WoodButton("Party Stash", { dispatch(Action.TransferItem(newActionId(), item.id, null, qty)); moving = false; onDismiss() }, Modifier.fillMaxWidth(), compact = true, kind = BtnKind.SECONDARY)
-            if (dm) chars.filter { it.id != item.ownerId }.forEach { ch ->
+            if (isDm) chars.filter { it.id != item.ownerId }.forEach { ch ->
                 WoodButton(ch.name, { dispatch(Action.TransferItem(newActionId(), item.id, ch.id, qty)); moving = false; onDismiss() }, Modifier.fillMaxWidth(), compact = true, kind = BtnKind.SECONDARY)
             }
         }
@@ -440,7 +434,7 @@ fun StatusRow(s: StatusEffect, dm: Boolean, onRemove: () -> Unit) {
             RhIconView(if (s.isBuff) RhIcon.STAR else RhIcon.SKULL, col, 26.dp)
             Column(Modifier.weight(1f)) {
                 RhText(s.name, style = Theme.body.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
-                val mods = listOf("ATK" to s.modAtk, "DEF" to s.modDef, "SPD" to s.modSpd, "HP" to s.modHp, "MP" to s.modMp).filter { it.second != 0 }.joinToString("  ") { "${it.first} ${sign(it.second)}" }
+                val mods = listOf("Attack" to s.modAtk, "Defense" to s.modDef, "Speed" to s.modSpd, "Luck" to s.modLuck, "Health" to s.modHp, "Mana" to s.modMp).filter { it.second != 0 }.joinToString("  ") { "${it.first} ${sign(it.second)}" }
                 RhText((if (s.turns > 0) "${s.turns} turn(s) left" else "Until removed") + if (mods.isNotEmpty()) " · $mods" else "", style = Theme.small)
                 if (s.description.isNotBlank()) RhText(s.description, style = Theme.small)
             }

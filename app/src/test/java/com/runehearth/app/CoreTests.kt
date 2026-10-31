@@ -152,6 +152,13 @@ class StatsTest {
         assertEquals(4, f.atk.equipment); assertEquals(-2, f.atk.status)
     }
 
+    @Test fun luckIsABaseEquipmentAndStatusStat() {
+        val clover = Item("i3", "k", "c", "Clover", equipped = true, bonusLuck = 4)
+        val curse = StatusEffect("s2", "c", "Cursed", modLuck = -2)
+        assertEquals(5 + 4 - 2, StatCalculator.compute(base, listOf(clover), listOf(curse)).luck.total)
+        assertEquals(5, StatCalculator.compute(base, emptyList(), emptyList()).luck.total)
+    }
+
     @Test fun levelUpsApplyAndCarryOverExperience() {
         assertEquals(100L, Leveling.expToNext(1))
         val (c, gained) = Leveling.award(base, 100 + 300 + 50)

@@ -157,6 +157,14 @@ interface GameDao {
 
     @Insert
     suspend fun insert(e: EventLogEntry): Long
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertEvent(e: EventLogEntry)
+    @Query("SELECT * FROM event_log WHERE seq = :seq")
+    suspend fun event(seq: Long): EventLogEntry?
+    @Query("DELETE FROM event_log WHERE seq = :seq")
+    suspend fun deleteEvent(seq: Long)
+    @Query("SELECT * FROM event_log WHERE campaignId = :cid ORDER BY seq DESC LIMIT 500")
+    suspend fun recentEvents(cid: String): List<EventLogEntry>
     @Query("SELECT * FROM event_log WHERE campaignId = :cid ORDER BY seq DESC LIMIT :limit")
     fun observeEvents(cid: String, limit: Int): Flow<List<EventLogEntry>>
     @Query("DELETE FROM event_log WHERE campaignId = :cid AND seq IN (SELECT seq FROM event_log WHERE campaignId = :cid ORDER BY seq DESC LIMIT -1 OFFSET :keep)")

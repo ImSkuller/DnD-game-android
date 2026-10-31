@@ -16,7 +16,7 @@ import com.runehearth.app.data.Wallet
 import kotlinx.serialization.json.Json
 import java.util.zip.CRC32
 
-enum class EntityType { CAMPAIGN, CHARACTER, ITEM, SKILL, STATUS, WALLET, TX, ENTRY, ENCOUNTER, COMBATANT, ROLL }
+enum class EntityType { CAMPAIGN, CHARACTER, ITEM, SKILL, STATUS, WALLET, TX, ENTRY, ENCOUNTER, COMBATANT, ROLL, EVENT }
 
 /** Audience helpers. Audience strings: `*` = everyone, `DM` = host only, otherwise comma separated character ids. */
 object Aud {
@@ -79,6 +79,8 @@ object EntityStore {
             val active = dao.encounter(it.encounterId)?.active == true
             Snapshot(json.encodeToString(Combatant.serializer(), it), Aud.ALL, active)
         }
+        // events (incl. player-edit notifications) are DM-only: never visible to players, delivered to DM controllers via DmDelta
+        EntityType.EVENT -> id.toLongOrNull()?.let { dao.event(it) }?.let { Snapshot(json.encodeToString(com.runehearth.app.data.EventLogEntry.serializer(), it), Aud.DM, false) }
         EntityType.ROLL -> dao.roll(id)?.let {
             val aud = if (it.isPublic) Aud.ALL else Aud.of(it.actor.takeIf { a -> a != "DM" })
             Snapshot(json.encodeToString(RollRecord.serializer(), it), aud, it.isPublic || it.actor != "DM")
@@ -103,6 +105,7 @@ object EntityStore {
                 EntityType.ENCOUNTER -> { dao.deleteCombatantsOf(id); dao.deleteEncounter(id) }
                 EntityType.COMBATANT -> dao.deleteCombatant(id)
                 EntityType.ROLL -> dao.deleteRoll(id)
+                EntityType.EVENT -> id.toLongOrNull()?.let { dao.deleteEvent(it) }
             }
             return
         }
@@ -122,6 +125,7 @@ object EntityStore {
             EntityType.ENCOUNTER -> dao.upsert(json.decodeFromString(Encounter.serializer(), payload))
             EntityType.COMBATANT -> dao.upsert(json.decodeFromString(Combatant.serializer(), payload))
             EntityType.ROLL -> dao.upsert(json.decodeFromString(RollRecord.serializer(), payload))
+            EntityType.EVENT -> dao.upsertEvent(json.decodeFromString(com.runehearth.app.data.EventLogEntry.serializer(), payload))
         }
     }
 

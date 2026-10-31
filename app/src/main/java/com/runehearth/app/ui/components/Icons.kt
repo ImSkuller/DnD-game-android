@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 /** Custom medieval line icons drawn in a 24×24 box (no icon library dependency). */
 enum class RhIcon {
     CASTLE, SHIELD, COIN, DICE, SWORDS, SCROLL, USER, BAG, BOOK, GEAR, BACK, PLUS, MINUS, CLOSE, CHECK, SEARCH, HEART, STAR, FLAME,
-    WIFI, CROWN, SKULL, TRASH, EDIT, ARROW, LOCK, EYE, POTION, WAND, HELM, GEM, MAP, CLOCK, SHARE
+    WIFI, BELL, CROWN, SKULL, TRASH, EDIT, ARROW, LOCK, EYE, POTION, WAND, HELM, GEM, MAP, CLOCK, SHARE
 }
 
 @Composable
@@ -56,6 +56,7 @@ fun DrawScope.drawRhIcon(icon: RhIcon, c: Color) {
             RhIcon.STAR -> drawPath(p { val pts = com.runehearth.app.art.starPoints(12f, 12.5f, 9.5f, 4f, 5); moveTo(pts[0], pts[1]); var i = 2; while (i < pts.size) { lineTo(pts[i], pts[i + 1]); i += 2 }; close() }, c, style = Fill)
             RhIcon.FLAME -> drawPath(p { moveTo(12f, 2f); cubicTo(17f, 8f, 19f, 11f, 19f, 15f); cubicTo(19f, 19f, 15.5f, 22f, 12f, 22f); cubicTo(8.5f, 22f, 5f, 19f, 5f, 15f); cubicTo(5f, 12f, 7f, 10f, 8.5f, 8f); cubicTo(9.5f, 10f, 10.5f, 10.5f, 11f, 10.5f); cubicTo(10.5f, 7f, 10.5f, 4.5f, 12f, 2f); close() }, c, style = Fill)
             RhIcon.WIFI -> { drawPath(p { moveTo(3f, 9f); quadraticTo(12f, 1f, 21f, 9f) }, c, style = st); drawPath(p { moveTo(6f, 13f); quadraticTo(12f, 7.5f, 18f, 13f) }, c, style = st); drawPath(p { moveTo(9f, 17f); quadraticTo(12f, 14.5f, 15f, 17f) }, c, style = st); drawCircle(c, 1.4f, Offset(12f, 20f)) }
+            RhIcon.BELL -> { drawPath(p { moveTo(5f, 17f); lineTo(5f, 11f); cubicTo(5f, 5f, 19f, 5f, 19f, 11f); lineTo(19f, 17f); close() }, c, style = st); drawLine(c, Offset(3f, 17f), Offset(21f, 17f), 1.9f, StrokeCap.Round); drawCircle(c, 1.8f, Offset(12f, 20.5f)); drawLine(c, Offset(12f, 3f), Offset(12f, 5f), 1.9f, StrokeCap.Round) }
             RhIcon.CROWN -> drawPath(p { moveTo(3f, 19f); lineTo(3f, 8f); lineTo(8f, 13f); lineTo(12f, 5f); lineTo(16f, 13f); lineTo(21f, 8f); lineTo(21f, 19f); close() }, c, style = st)
             RhIcon.SKULL -> { drawPath(p { moveTo(5f, 13f); cubicTo(2f, 4f, 22f, 4f, 19f, 13f); lineTo(16f, 15f); lineTo(16f, 20f); lineTo(8f, 20f); lineTo(8f, 15f); close() }, c, style = st); drawCircle(c, 1.6f, Offset(9f, 11f)); drawCircle(c, 1.6f, Offset(15f, 11f)) }
             RhIcon.TRASH -> { drawPath(p { moveTo(6f, 7f); lineTo(7f, 20f); lineTo(17f, 20f); lineTo(18f, 7f) }, c, style = st); drawLine(c, Offset(4f, 7f), Offset(20f, 7f), 1.9f, StrokeCap.Round); drawLine(c, Offset(9f, 4f), Offset(15f, 4f), 1.9f, StrokeCap.Round) }

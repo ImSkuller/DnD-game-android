@@ -184,4 +184,45 @@ class EngineTest {
         assertEquals("Gem", db.dao().item("i")!!.name)
         assertEquals(2, db.dao().characters(cid).size)
     }
+
+    @Test fun playersManageTheirOwnSheetInventoryAndStatusAndTheDmIsNotified() = runBlocking<Unit> {
+        val p = player("hero")
+        val ch = db.dao().character("hero")!!
+        // stats (incl. Luck)
+        assertTrue(engine.execute(cid, p, Action.UpsertCharacter(aid(), ch.copy(baseAtk = 9, baseLuck = 8), ch.rev)).ok)
+        assertEquals(9, db.dao().character("hero")!!.baseAtk); assertEquals(8, db.dao().character("hero")!!.baseLuck)
+        suspend fun notes() = db.dao().recentEvents(cid).filter { it.type == "notify" }.map { it.text }
+        assertTrue(notes().any { it.contains("Hero") && it.contains("Attack 5 → 9") && it.contains("Luck 5 → 8") })
+        // inventory: add, edit quantity, equip a luck item, delete
+        assertTrue(engine.execute(cid, p, Action.UpsertItem(aid(), Item("clover", cid, "hero", "Clover", ItemKind.ACCESSORY, EquipSlot.ACCESSORY, bonusLuck = 3))).ok)
+        assertTrue(engine.execute(cid, p, Action.Equip(aid(), "clover")).ok)
+        val stats = com.runehearth.app.engine.StatCalculator.compute(db.dao().character("hero")!!, db.dao().equippedOf("hero"), emptyList())
+        assertEquals(8 + 3, stats.luck.total)
+        assertTrue(notes().any { it.contains("added Clover") })
+        assertTrue(engine.execute(cid, p, Action.UpsertItem(aid(), Item("pots", cid, "hero", "Potion", ItemKind.POTION, quantity = 2, healHp = 5))).ok)
+        assertTrue(engine.execute(cid, p, Action.UpsertItem(aid(), db.dao().item("pots")!!.copy(quantity = 5))).ok)
+        assertTrue(notes().any { it.contains("quantity 2 → 5") })
+        assertTrue(engine.execute(cid, p, Action.DeleteItem(aid(), "pots")).ok)
+        assertNull(db.dao().item("pots")); assertTrue(notes().any { it.contains("removed Potion") })
+        // status effects on themselves
+        val fx = com.runehearth.app.data.StatusEffect("fx", "hero", "Blessed", isBuff = true, modLuck = 2)
+        assertTrue(engine.execute(cid, p, Action.UpsertStatus(aid(), fx)).ok)
+        assertTrue(engine.execute(cid, p, Action.DeleteStatus(aid(), "fx")).ok)
+        // ...but never on anyone else
+        val other = db.dao().character("friend")!!
+        assertFalse(engine.execute(cid, p, Action.UpsertCharacter(aid(), other.copy(baseAtk = 99), other.rev)).ok)
+        assertFalse(engine.execute(cid, p, Action.UpsertItem(aid(), Item("steal", cid, "friend", "Loot", ItemKind.MISC))).ok)
+        engine.execute(cid, dm, Action.UpsertItem(aid(), Item("theirs", cid, "friend", "Theirs", ItemKind.MISC)))
+        assertFalse(engine.execute(cid, p, Action.UpsertItem(aid(), db.dao().item("theirs")!!.copy(ownerId = "hero"))).ok)
+        assertFalse(engine.execute(cid, p, Action.DeleteItem(aid(), "theirs")).ok)
+        assertFalse(engine.execute(cid, p, Action.UpsertStatus(aid(), fx.copy(targetId = "friend"))).ok)
+        // protected fields stay protected
+        val own = db.dao().character("hero")!!
+        engine.execute(cid, p, Action.UpsertCharacter(aid(), own.copy(isNpc = true, exp = 99999), own.rev))
+        assertFalse(db.dao().character("hero")!!.isNpc); assertEquals(0L, db.dao().character("hero")!!.exp)
+        // DM edits do not generate notifications
+        val before = notes().size
+        engine.execute(cid, dm, Action.UpsertCharacter(aid(), db.dao().character("hero")!!.copy(baseDef = 12)))
+        assertEquals(before, notes().size)
+    }
 }

@@ -69,7 +69,7 @@ data class GameCharacter(
     val description: String = "",
     val baseHp: Int = 30, val baseMp: Int = 10, val baseAtk: Int = 5, val baseDef: Int = 3, val baseSpd: Int = 5,
     val curHp: Int = 30, val curMp: Int = 10,
-    val str: Int = 10, val dex: Int = 10, val con: Int = 10, val intel: Int = 10, val wis: Int = 10, val cha: Int = 10,
+    @ColumnInfo(defaultValue = "5") val baseLuck: Int = 5,
     val notes: String = "",
     val ownerDeviceId: String? = null,
     val isNpc: Boolean = false,
@@ -93,6 +93,7 @@ data class Item(
     val art: String = "",
     val equipped: Boolean = false,
     val bonusHp: Int = 0, val bonusMp: Int = 0, val bonusAtk: Int = 0, val bonusDef: Int = 0, val bonusSpd: Int = 0,
+    @ColumnInfo(defaultValue = "0") val bonusLuck: Int = 0,
     /** Consumable effect: restores [healHp]/[healMp] when used. */
     val healHp: Int = 0, val healMp: Int = 0,
     val value: Long = 0,
@@ -130,6 +131,7 @@ data class StatusEffect(
     /** Remaining turns; 0 = until removed. */
     val turns: Int = 0,
     val modHp: Int = 0, val modMp: Int = 0, val modAtk: Int = 0, val modDef: Int = 0, val modSpd: Int = 0,
+    @ColumnInfo(defaultValue = "0") val modLuck: Int = 0,
     val rev: Long = 1,
 )
 
@@ -234,6 +236,7 @@ data class RollRecord(
     val auditHash: String = "",
 )
 
+@Serializable
 @Entity(tableName = "event_log", indices = [Index("campaignId", "seq")])
 data class EventLogEntry(
     @PrimaryKey(autoGenerate = true) val seq: Long = 0,

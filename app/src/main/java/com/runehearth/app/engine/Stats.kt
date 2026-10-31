@@ -9,7 +9,7 @@ data class StatLine(val base: Int, val equipment: Int, val status: Int) {
     val total: Int get() = base + equipment + status
 }
 
-data class FinalStats(val hp: StatLine, val mp: StatLine, val atk: StatLine, val def: StatLine, val spd: StatLine) {
+data class FinalStats(val hp: StatLine, val mp: StatLine, val atk: StatLine, val def: StatLine, val spd: StatLine, val luck: StatLine = StatLine(0, 0, 0)) {
     val maxHp: Int get() = hp.total.coerceAtLeast(1)
     val maxMp: Int get() = mp.total.coerceAtLeast(0)
 }
@@ -17,15 +17,15 @@ data class FinalStats(val hp: StatLine, val mp: StatLine, val atk: StatLine, val
 object StatCalculator {
     /** Final stats = base + bonuses of equipped items + active status modifiers. Pure; unit tested. */
     fun compute(c: GameCharacter, equipped: List<Item>, statuses: List<StatusEffect>): FinalStats {
-        var eHp = 0; var eMp = 0; var eAtk = 0; var eDef = 0; var eSpd = 0
+        var eHp = 0; var eMp = 0; var eAtk = 0; var eDef = 0; var eSpd = 0; var eLuck = 0
         for (i in equipped) if (i.equipped) {
-            eHp += i.bonusHp; eMp += i.bonusMp; eAtk += i.bonusAtk; eDef += i.bonusDef; eSpd += i.bonusSpd
+            eHp += i.bonusHp; eMp += i.bonusMp; eAtk += i.bonusAtk; eDef += i.bonusDef; eSpd += i.bonusSpd; eLuck += i.bonusLuck
         }
-        var sHp = 0; var sMp = 0; var sAtk = 0; var sDef = 0; var sSpd = 0
-        for (s in statuses) { sHp += s.modHp; sMp += s.modMp; sAtk += s.modAtk; sDef += s.modDef; sSpd += s.modSpd }
+        var sHp = 0; var sMp = 0; var sAtk = 0; var sDef = 0; var sSpd = 0; var sLuck = 0
+        for (s in statuses) { sHp += s.modHp; sMp += s.modMp; sAtk += s.modAtk; sDef += s.modDef; sSpd += s.modSpd; sLuck += s.modLuck }
         return FinalStats(
             StatLine(c.baseHp, eHp, sHp), StatLine(c.baseMp, eMp, sMp), StatLine(c.baseAtk, eAtk, sAtk),
-            StatLine(c.baseDef, eDef, sDef), StatLine(c.baseSpd, eSpd, sSpd),
+            StatLine(c.baseDef, eDef, sDef), StatLine(c.baseSpd, eSpd, sSpd), StatLine(c.baseLuck, eLuck, sLuck),
         )
     }
 }

@@ -87,6 +87,7 @@ fun DmShell(campaignId: String, onExit: () -> Unit) {
             title = camp?.name ?: "Campaign",
             onBack = if (charId != null) ({ charId = null }) else if (story) ({ story = false }) else onExit,
             actions = {
+                NotificationBell(campaignId)
                 val label = when (conn) { ConnectionState.HOSTING -> "Hosting"; else -> if (camp?.mode == CampaignMode.COOP) "Co-op" else "Local" }
                 Tag(label, if (conn == ConnectionState.HOSTING) Color(0xFF5CB85C) else Theme.steel)
                 Spacer(Modifier.size(10.dp))

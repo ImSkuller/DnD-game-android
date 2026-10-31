@@ -69,6 +69,7 @@ fun CharacterEditor(campaignId: String, initial: GameCharacter?, onDismiss: () -
         }, kind = BtnKind.GOLD, compact = true, enabled = c.name.isNotBlank())
     }) {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!com.runehearth.app.ui.LocalSession.current.isDm) RhText("You can change your own stats. Your Dungeon Master is notified when you do.", style = Theme.small)
             ArtField("Portrait", c.art, listOf(ArtCategory.HELMET, ArtCategory.MONSTER), { c = c.copy(art = it) })
             RhTextField(c.name, { c = c.copy(name = it.take(60)) }, label = "Name", onDark = false)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -79,23 +80,19 @@ fun CharacterEditor(campaignId: String, initial: GameCharacter?, onDismiss: () -
                 RhTextField(c.race, { c = c.copy(race = it.take(40)) }, Modifier.weight(1f), "Race", onDark = false)
                 IntField("Level", c.level, { c = c.copy(level = it.coerceIn(1, 100)) }, Modifier.weight(1f))
             }
-            RhText("BASE STATS", style = Theme.label.copy(fontSize = 10.5.sp), color = Theme.goldDark)
+            RhText("STATS", style = Theme.label.copy(fontSize = 10.5.sp), color = Theme.goldDark)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IntField("HP", c.baseHp, { c = c.copy(baseHp = it) }, Modifier.weight(1f)); IntField("MP", c.baseMp, { c = c.copy(baseMp = it) }, Modifier.weight(1f))
+                IntField("Health", c.baseHp, { c = c.copy(baseHp = it) }, Modifier.weight(1f)); IntField("Mana", c.baseMp, { c = c.copy(baseMp = it) }, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IntField("Attack", c.baseAtk, { c = c.copy(baseAtk = it) }, Modifier.weight(1f)); IntField("Defense", c.baseDef, { c = c.copy(baseDef = it) }, Modifier.weight(1f)); IntField("Speed", c.baseSpd, { c = c.copy(baseSpd = it) }, Modifier.weight(1f))
-            }
-            RhText("ATTRIBUTES", style = Theme.label.copy(fontSize = 10.5.sp), color = Theme.goldDark)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IntField("STR", c.str, { c = c.copy(str = it) }, Modifier.weight(1f)); IntField("DEX", c.dex, { c = c.copy(dex = it) }, Modifier.weight(1f)); IntField("CON", c.con, { c = c.copy(con = it) }, Modifier.weight(1f))
+                IntField("Attack", c.baseAtk, { c = c.copy(baseAtk = it) }, Modifier.weight(1f)); IntField("Defense", c.baseDef, { c = c.copy(baseDef = it) }, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IntField("INT", c.intel, { c = c.copy(intel = it) }, Modifier.weight(1f)); IntField("WIS", c.wis, { c = c.copy(wis = it) }, Modifier.weight(1f)); IntField("CHA", c.cha, { c = c.copy(cha = it) }, Modifier.weight(1f))
+                IntField("Speed", c.baseSpd, { c = c.copy(baseSpd = it) }, Modifier.weight(1f)); IntField("Luck", c.baseLuck, { c = c.copy(baseLuck = it) }, Modifier.weight(1f))
             }
             RhTextField(c.background, { c = c.copy(background = it) }, label = "Background", singleLine = false, minLines = 2, onDark = false)
             RhTextField(c.description, { c = c.copy(description = it) }, label = "Description", singleLine = false, minLines = 2, onDark = false)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (com.runehearth.app.ui.LocalSession.current.isDm) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip("Player character", !c.isNpc, { c = c.copy(isNpc = false) }); Chip("NPC (DM only)", c.isNpc, { c = c.copy(isNpc = true) })
             }
         }
@@ -112,6 +109,7 @@ fun ItemEditor(campaignId: String, ownerId: String?, initial: Item?, onDismiss: 
         WoodButton("Save", { dispatch(Action.UpsertItem(newActionId(), i, mergeStacks = initial == null)); onDismiss() }, kind = BtnKind.GOLD, compact = true, enabled = i.name.isNotBlank())
     }) {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!com.runehearth.app.ui.LocalSession.current.isDm) RhText("Your Dungeon Master is notified when you add or change items.", style = Theme.small)
             if (initial == null) {
                 RhText("QUICK TEMPLATES", style = Theme.label.copy(fontSize = 10.5.sp), color = Theme.goldDark)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -131,14 +129,14 @@ fun ItemEditor(campaignId: String, ownerId: String?, initial: Item?, onDismiss: 
             }
             RhText("BONUSES WHEN EQUIPPED", style = Theme.label.copy(fontSize = 10.5.sp), color = Theme.goldDark)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                SignedField("ATK", i.bonusAtk, { it0 = i.copy(bonusAtk = it) }, Modifier.weight(1f)); SignedField("DEF", i.bonusDef, { it0 = i.copy(bonusDef = it) }, Modifier.weight(1f)); SignedField("SPD", i.bonusSpd, { it0 = i.copy(bonusSpd = it) }, Modifier.weight(1f))
+                SignedField("Attack", i.bonusAtk, { it0 = i.copy(bonusAtk = it) }, Modifier.weight(1f)); SignedField("Defense", i.bonusDef, { it0 = i.copy(bonusDef = it) }, Modifier.weight(1f)); SignedField("Speed", i.bonusSpd, { it0 = i.copy(bonusSpd = it) }, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                SignedField("HP", i.bonusHp, { it0 = i.copy(bonusHp = it) }, Modifier.weight(1f)); SignedField("MP", i.bonusMp, { it0 = i.copy(bonusMp = it) }, Modifier.weight(1f))
+                SignedField("Health", i.bonusHp, { it0 = i.copy(bonusHp = it) }, Modifier.weight(1f)); SignedField("Mana", i.bonusMp, { it0 = i.copy(bonusMp = it) }, Modifier.weight(1f)); SignedField("Luck", i.bonusLuck, { it0 = i.copy(bonusLuck = it) }, Modifier.weight(1f))
             }
             RhText("WHEN USED", style = Theme.label.copy(fontSize = 10.5.sp), color = Theme.goldDark)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                IntField("Heal HP", i.healHp, { it0 = i.copy(healHp = it) }, Modifier.weight(1f)); IntField("Restore MP", i.healMp, { it0 = i.copy(healMp = it) }, Modifier.weight(1f))
+                IntField("Heal Health", i.healHp, { it0 = i.copy(healHp = it) }, Modifier.weight(1f)); IntField("Restore Mana", i.healMp, { it0 = i.copy(healMp = it) }, Modifier.weight(1f))
             }
             RhTextField(i.description, { it0 = i.copy(description = it) }, label = "Description", singleLine = false, minLines = 2, onDark = false)
         }
@@ -182,6 +180,8 @@ fun StatusEditor(targetId: String, onDismiss: () -> Unit) {
         StatusEffect("", targetId, "Stunned", "Cannot act.", false, 1, modDef = -2, modSpd = -99),
         StatusEffect("", targetId, "Shielded", "A ward absorbs blows.", true, 3, modDef = 5),
         StatusEffect("", targetId, "Weakened", "Strength sapped.", false, 3, modAtk = -3),
+        StatusEffect("", targetId, "Lucky", "Fortune favours you.", true, 3, modLuck = 5),
+        StatusEffect("", targetId, "Cursed", "Bad luck follows.", false, 3, modLuck = -5),
     )
     RhDialog(onDismiss, "Add Status Effect", modifier = Modifier.height(560.dp), actions = {
         WoodButton("Cancel", onDismiss, kind = BtnKind.SECONDARY, compact = true)
@@ -194,10 +194,10 @@ fun StatusEditor(targetId: String, onDismiss: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Chip("Buff", s.isBuff, { s = s.copy(isBuff = true) }); Chip("Debuff", !s.isBuff, { s = s.copy(isBuff = false) }) }
             IntField("Duration in turns (0 = until removed)", s.turns, { s = s.copy(turns = it) })
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                SignedField("ATK", s.modAtk, { s = s.copy(modAtk = it) }, Modifier.weight(1f)); SignedField("DEF", s.modDef, { s = s.copy(modDef = it) }, Modifier.weight(1f)); SignedField("SPD", s.modSpd, { s = s.copy(modSpd = it) }, Modifier.weight(1f))
+                SignedField("Attack", s.modAtk, { s = s.copy(modAtk = it) }, Modifier.weight(1f)); SignedField("Defense", s.modDef, { s = s.copy(modDef = it) }, Modifier.weight(1f)); SignedField("Speed", s.modSpd, { s = s.copy(modSpd = it) }, Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                SignedField("Max HP", s.modHp, { s = s.copy(modHp = it) }, Modifier.weight(1f)); SignedField("Max MP", s.modMp, { s = s.copy(modMp = it) }, Modifier.weight(1f))
+                SignedField("Luck", s.modLuck, { s = s.copy(modLuck = it) }, Modifier.weight(1f)); SignedField("Health", s.modHp, { s = s.copy(modHp = it) }, Modifier.weight(1f)); SignedField("Mana", s.modMp, { s = s.copy(modMp = it) }, Modifier.weight(1f))
             }
             RhTextField(s.description, { s = s.copy(description = it) }, label = "Description", onDark = false)
             Spacer(Modifier.height(2.dp))

@@ -132,8 +132,12 @@ class ActionEngine(
 
         suspend fun log(type: String, text: String) {
             val seq = dao.insert(EventLogEntry(campaignId = cid, ts = clock(), type = type, text = text, actor = actor.tag))
+            mark(EntityType.EVENT, seq.toString())
             if (seq % 100 == 0L) dao.pruneEvents(cid, 1000)
         }
+
+        /** Players may edit their own sheet and inventory; whenever they do, the DM gets a notification (an event of type `notify`). */
+        suspend fun notifyDm(text: String) { if (!actor.isDm) log("notify", text) }
 
         suspend fun flush(): Long {
             var seq = camp.lastSeq
@@ -259,11 +263,14 @@ class ActionEngine(
                     log("exp", "${c.name} gained ${a.amount} XP" + if (gained > 0) " and reached level ${n.level}!" else "")
                 }
                 is Action.AdjustVitals -> {
-                    requireDm()
+                    requireSelfOrDm(a.characterId)
                     val c = requireChar(a.characterId)
                     val s = statsOf(c)
-                    saveChar(c.copy(curHp = (c.curHp + a.dHp).coerceIn(0, s.maxHp), curMp = (c.curMp + a.dMp).coerceIn(0, s.maxMp)))
+                    val nHp = (c.curHp + a.dHp).coerceIn(0, s.maxHp); val nMp = (c.curMp + a.dMp).coerceIn(0, s.maxMp)
+                    saveChar(c.copy(curHp = nHp, curMp = nMp))
                     if (a.dHp != 0) log("vitals", "${c.name} ${if (a.dHp < 0) "took ${-a.dHp} damage" else "healed ${a.dHp} HP"}")
+                    val parts = listOfNotNull(if (nHp != c.curHp) "Health ${c.curHp} → $nHp" else null, if (nMp != c.curMp) "Mana ${c.curMp} → $nMp" else null)
+                    if (parts.isNotEmpty()) notifyDm("${c.name} changed ${parts.joinToString(", ")}")
                 }
                 is Action.UpdateNotes -> {
                     requireSelfOrDm(a.characterId)
@@ -273,8 +280,12 @@ class ActionEngine(
                 }
                 is Action.UpsertItem -> upsertItem(a)
                 is Action.DeleteItem -> {
-                    requireDm()
-                    dao.item(a.itemId)?.let { dao.deleteItem(it.id); mark(EntityType.ITEM, it.id); it.ownerId?.let { o -> reclamp(o) } }
+                    val it0 = dao.item(a.itemId)
+                    if (it0 != null) {
+                        if (!actor.isDm && it0.ownerId != actor.characterId) reject("That is not your item")
+                        dao.deleteItem(it0.id); mark(EntityType.ITEM, it0.id); it0.ownerId?.let { o -> reclamp(o) }
+                        notifyDm("${ownerName(actor.characterId)} removed ${it0.name}")
+                    }
                 }
                 is Action.Equip -> equip(a.itemId)
                 is Action.Unequip -> {
@@ -287,18 +298,24 @@ class ActionEngine(
                 is Action.UseItem -> useItem(a.itemId)
                 is Action.TransferItem -> transferItem(a)
                 is Action.UpsertSkill -> {
-                    requireDm()
                     val s = a.skill
+                    requireSelfOrDm(s.characterId)
                     requireChar(s.characterId)
                     val old = dao.skill(s.id)
+                    if (old != null && old.characterId != s.characterId) reject("That skill belongs to someone else")
                     dao.upsert(s.copy(name = name(s.name), description = s.description.clip(600), effect = s.effect.clip(300),
                         level = s.level.coerceIn(1, 99), manaCost = s.manaCost.coerceIn(0, 9999), cooldown = s.cooldown.coerceIn(0, 99),
                         rev = (old?.rev ?: 0) + 1))
                     mark(EntityType.SKILL, s.id)
+                    notifyDm("${ownerName(s.characterId)} ${if (old == null) "learned" else "edited"} skill ${s.name}")
                 }
                 is Action.DeleteSkill -> {
-                    requireDm()
-                    dao.deleteSkill(a.skillId); mark(EntityType.SKILL, a.skillId)
+                    val sk = dao.skill(a.skillId)
+                    if (sk != null) {
+                        requireSelfOrDm(sk.characterId)
+                        dao.deleteSkill(sk.id); mark(EntityType.SKILL, sk.id)
+                        notifyDm("${ownerName(sk.characterId)} forgot skill ${sk.name}")
+                    }
                 }
                 is Action.CastSkill -> {
                     val s = dao.skill(a.skillId) ?: reject("Skill not found")
@@ -309,17 +326,23 @@ class ActionEngine(
                     log("cast", "${c.name} cast ${s.name}" + if (a.targetName.isNotBlank()) " on ${a.targetName.clip(40)}" else "")
                 }
                 is Action.UpsertStatus -> {
-                    requireDm()
                     val s = a.status
+                    if (!actor.isDm && s.targetId != actor.characterId) reject("You can only change your own status effects")
                     if (dao.character(s.targetId) == null && dao.combatant(s.targetId) == null) reject("Target not found")
                     val old = dao.status(s.id)
+                    if (old != null && old.targetId != s.targetId) reject("That effect belongs to someone else")
                     dao.upsert(s.copy(name = name(s.name), description = s.description.clip(300), turns = s.turns.coerceIn(0, 999), rev = (old?.rev ?: 0) + 1))
                     mark(EntityType.STATUS, s.id)
                     reclamp(s.targetId)
+                    notifyDm("${ownerName(s.targetId)} ${if (old == null) "gained" else "changed"} status ${s.name}")
                 }
                 is Action.DeleteStatus -> {
-                    requireDm()
-                    dao.status(a.statusId)?.let { dao.deleteStatus(it.id); mark(EntityType.STATUS, it.id); reclamp(it.targetId) }
+                    val st = dao.status(a.statusId)
+                    if (st != null) {
+                        if (!actor.isDm && st.targetId != actor.characterId) reject("You can only change your own status effects")
+                        dao.deleteStatus(st.id); mark(EntityType.STATUS, st.id); reclamp(st.targetId)
+                        notifyDm("${ownerName(st.targetId)} removed status ${st.name}")
+                    }
                 }
                 is Action.AdjustWallet -> {
                     requireDm()
@@ -447,10 +470,28 @@ class ActionEngine(
 
         private fun walletLabel(w: Wallet) = if (w.ownerId == null) "to party funds" else "to a personal purse"
 
+        private suspend fun ownerName(characterId: String?): String = characterId?.let { dao.character(it)?.name } ?: "A player"
+
+        private fun describeChanges(o: GameCharacter, n: GameCharacter): String = listOfNotNull(
+            if (o.name != n.name) "name → ${n.name}" else null,
+            if (o.level != n.level) "Level ${o.level} → ${n.level}" else null,
+            if (o.baseHp != n.baseHp) "HP ${o.baseHp} → ${n.baseHp}" else null,
+            if (o.baseMp != n.baseMp) "Mana ${o.baseMp} → ${n.baseMp}" else null,
+            if (o.baseAtk != n.baseAtk) "Attack ${o.baseAtk} → ${n.baseAtk}" else null,
+            if (o.baseDef != n.baseDef) "Defense ${o.baseDef} → ${n.baseDef}" else null,
+            if (o.baseSpd != n.baseSpd) "Speed ${o.baseSpd} → ${n.baseSpd}" else null,
+            if (o.baseLuck != n.baseLuck) "Luck ${o.baseLuck} → ${n.baseLuck}" else null,
+            if (o.className != n.className) "class → ${n.className}" else null,
+            if (o.job != n.job) "job → ${n.job}" else null,
+            if (o.race != n.race) "race → ${n.race}" else null,
+        ).joinToString(", ")
+
         private suspend fun upsertCharacter(a: Action.UpsertCharacter) {
-            requireDm()
             val c = a.character
             val old = dao.character(c.id)
+            if (!actor.isDm) { // a player may edit only their own, already existing sheet
+                if (old == null || old.id != actor.characterId) reject("That is not your character")
+            }
             if (old != null && a.expectedRev >= 0 && a.expectedRev != old.rev) reject("stale: the sheet changed, resynced")
             fun st(v: Int) = v.coerceIn(0, 9999)
             val clean = c.copy(
@@ -458,33 +499,39 @@ class ActionEngine(
                 background = c.background.clip(1000), description = c.description.clip(2000), notes = c.notes.clip(8000),
                 level = c.level.coerceIn(1, Leveling.MAX_LEVEL), exp = c.exp.coerceAtLeast(0),
                 baseHp = st(c.baseHp).coerceAtLeast(1), baseMp = st(c.baseMp), baseAtk = st(c.baseAtk), baseDef = st(c.baseDef), baseSpd = st(c.baseSpd),
-                str = c.str.coerceIn(1, 99), dex = c.dex.coerceIn(1, 99), con = c.con.coerceIn(1, 99),
-                intel = c.intel.coerceIn(1, 99), wis = c.wis.coerceIn(1, 99), cha = c.cha.coerceIn(1, 99),
+                baseLuck = st(c.baseLuck),
                 ownerDeviceId = c.ownerDeviceId ?: old?.ownerDeviceId, rev = old?.rev ?: 0,
-            )
+            ).let { n -> if (actor.isDm || old == null) n else n.copy(isNpc = old.isNpc, ownerDeviceId = old.ownerDeviceId, exp = old.exp, notes = old.notes) }
             saveChar(clean)
+            if (old != null) describeChanges(old, clean).takeIf { it.isNotEmpty() }?.let { notifyDm("${old.name} changed $it") }
             ensureWallet(Wallet.personalId(c.id), c.id)
             if (old == null) log("character", "${clean.name} joined the party")
         }
 
         private suspend fun upsertItem(a: Action.UpsertItem) {
-            requireDm()
             val i = a.item
-            i.ownerId?.let { requireChar(it) }
             val old = dao.item(i.id)
+            if (!actor.isDm) { // a player may only create / edit items in their own pack
+                if (i.ownerId == null || i.ownerId != actor.characterId) reject("You can only manage items in your own pack")
+                if (old != null && old.ownerId != actor.characterId) reject("That is not your item")
+            }
+            i.ownerId?.let { requireChar(it) }
             val clean = i.copy(
                 campaignId = cid, name = name(i.name), description = i.description.clip(800),
                 quantity = i.quantity.coerceIn(1, 9999), weight = i.weight.coerceIn(0, 9999), value = i.value.coerceIn(0, Money.MAX_BALANCE),
                 kind = i.kind, slot = i.slot,
                 equipped = (old?.equipped ?: false) && i.slot != null && i.ownerId != null && i.ownerId == old?.ownerId,
                 bonusHp = i.bonusHp.coerceIn(-999, 999), bonusMp = i.bonusMp.coerceIn(-999, 999), bonusAtk = i.bonusAtk.coerceIn(-999, 999),
-                bonusDef = i.bonusDef.coerceIn(-999, 999), bonusSpd = i.bonusSpd.coerceIn(-999, 999),
+                bonusDef = i.bonusDef.coerceIn(-999, 999), bonusSpd = i.bonusSpd.coerceIn(-999, 999), bonusLuck = i.bonusLuck.coerceIn(-999, 999),
                 healHp = i.healHp.coerceIn(0, 9999), healMp = i.healMp.coerceIn(0, 9999),
                 rev = (old?.rev ?: 0) + 1,
             )
             if (old == null && a.mergeStacks) addToOwner(clean, clean.ownerId) else { dao.upsert(clean); mark(EntityType.ITEM, clean.id) }
             old?.ownerId?.let { reclamp(it) }
             clean.ownerId?.let { reclamp(it) }
+            val who = ownerName(actor.characterId)
+            if (old == null) notifyDm("$who added ${clean.name}" + if (clean.quantity > 1) " ×${clean.quantity}" else "")
+            else notifyDm("$who edited ${clean.name}" + if (old.quantity != clean.quantity) " (quantity ${old.quantity} → ${clean.quantity})" else "")
         }
 
         private suspend fun ownedItem(itemId: String): Item {

@@ -23,6 +23,7 @@ data class CampaignBundle(
     val rolls: List<RollRecord> = emptyList(),
     /** Device ↔ character bindings, so players keep their identity after a restore or host migration. */
     val members: List<Member> = emptyList(),
+    val events: List<EventLogEntry> = emptyList(),
     /** Recently acknowledged action ids, so actions re-sent after a host change are not applied twice. */
     val processed: List<ProcessedAction> = emptyList(),
 )
@@ -49,6 +50,7 @@ class Backup(private val db: GameDatabase) {
             combatants = encs.flatMap { dao.combatants(it.id) },
             rolls = dao.allRolls(campaignId),
             members = dao.members(campaignId),
+            events = dao.recentEvents(campaignId),
             processed = dao.recentProcessed(),
         )
         return json.encodeToString(CampaignBundle.serializer(), bundle)
@@ -72,6 +74,7 @@ class Backup(private val db: GameDatabase) {
             wipe(cid)
             dao.upsert(b.campaign)
             b.members.forEach { dao.upsert(it) }
+            b.events.forEach { dao.upsertEvent(it) }
             b.processed.forEach { dao.upsert(it) }
             if (b.wallets.none { it.ownerId == null }) dao.upsert(Wallet(Wallet.partyId(cid), cid, null))
             b.characters.forEach { dao.upsert(it) }

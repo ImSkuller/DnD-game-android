@@ -173,6 +173,10 @@ class SyncTest {
             assertEquals(700L, app.db.dao().wallet(Wallet.partyId(cid))!!.balance)
             waitFor { dmDb.dao().wallet(Wallet.partyId(cid))?.takeIf { it.balance == 700L } }
             Log.i("SyncTest", "DM controller action + mirror update = ${(System.nanoTime() - t0) / 1_000_000} ms")
+            // a player editing their own stats notifies the DM controller (events travel DM-only)
+            val hero = app.db.dao().character(heroId)!!
+            app.engine.execute(cid, Actor(false, heroId, "player-dev"), Action.UpsertCharacter(u("edit"), hero.copy(baseLuck = 9), hero.rev))
+            waitFor { dmDb.dao().recentEvents(cid).firstOrNull { it.type == "notify" && it.text.contains("Luck 5 → 9") } }
             // a player cannot become DM with the player code
             val bad = connectDm("dm-evil", dmDb, code = host.code.value)
             assertTrue(waitFor { bad.error.value }.contains("code", ignoreCase = true))

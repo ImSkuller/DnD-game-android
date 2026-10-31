@@ -39,6 +39,10 @@ class RunehearthApp : Application() {
             perf.value = PerfPolicy.settings(PerfPolicy.resolve(v, deviceProfile))
         }
 
+    /** Highest player-edit notification the DM has already seen, per campaign. */
+    fun notifySeen(campaignId: String): Long = boot.getLong("seen_$campaignId", 0L)
+    fun setNotifySeen(campaignId: String, seq: Long) { boot.edit().putLong("seen_$campaignId", seq).apply() }
+
     override fun onCreate() {
         super.onCreate()
         Textures.SIZE = perf.value.textureSizePx
